@@ -58,7 +58,7 @@ struct SetupView: View {
     }
     .overlay {
       if state.setup.walksThrough {
-        PageDots(step: SetupFlow.step(of: state.setup.page, needsKey: state.needsAPIKey))
+        PageDots(step: SetupFlow.step(of: state.setup.page, hasModelPage: state.setup.hasModelPage))
       }
     }
   }
@@ -67,7 +67,10 @@ struct SetupView: View {
     if state.setup.page == .consent {
       Link("Privacy Policy", destination: Consent.privacyPolicyURL)
     } else if state.setup.walksThrough,
-      let previous = SetupFlow.page(before: state.setup.page, needsKey: state.needsAPIKey)
+      let previous = SetupFlow.page(
+        before: state.setup.page,
+        hasModelPage: state.setup.hasModelPage
+      )
     {
       Button("Back") { state.setup.page = previous }
         .accessibilityIdentifier("setup.back")
@@ -112,7 +115,7 @@ struct SetupView: View {
     if let next = SetupFlow.afterAllow(
       walksThrough: state.setup.walksThrough,
       permissionsGranted: state.permissions.allGranted,
-      needsKey: state.needsAPIKey
+      hasModelPage: state.setup.hasModelPage
     ) {
       state.setup.page = next
     } else {
@@ -121,7 +124,7 @@ struct SetupView: View {
   }
 
   private func advance() {
-    if let next = SetupFlow.page(after: state.setup.page, needsKey: state.needsAPIKey) {
+    if let next = SetupFlow.page(after: state.setup.page, hasModelPage: state.setup.hasModelPage) {
       state.setup.page = next
     } else {
       dismiss()
@@ -153,25 +156,14 @@ struct ModelPage: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .top, spacing: 14) {
-        Image(systemName: "key.fill")
-          .font(.largeTitle)
-          .foregroundStyle(.tint)
-          .frame(width: 64)
-          .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Connect a model")
-            .font(.title2.weight(.semibold))
-            .accessibilityAddTraits(.isHeader)
-          Text(
-            """
-            Athina asks the model you choose, with your own API key, and every call is billed \
-            to your account. Nothing is sent until a key is saved, and spending stops at the \
-            hourly limit.
-            """
-          )
-          .fixedSize(horizontal: false, vertical: true)
-        }
+      SetupHero(icon: .symbol("key.fill"), title: "Connect a model") {
+        Text(
+          """
+          Athina asks the model you choose, with your own API key, and every call is billed \
+          to your account. Nothing is sent until a key is saved, and spending stops at the \
+          hourly limit.
+          """
+        )
       }
       Form {
         ProviderSection()
@@ -179,10 +171,12 @@ struct ModelPage: View {
       }
       .formStyle(.grouped)
       // On the window's own background, as the other pages are; it scrolls
-      // when a key's error or a replay's rows make it taller.
+      // when a key's error or a replay's rows make it taller. The form draws
+      // its cards `SetupGrid.margin` inside its own edge, so it reaches the
+      // window's edges and its cards land on the page's.
       .scrollContentBackground(.hidden)
       .frame(height: 410)
-      .padding(.horizontal, -20)
+      .padding(.horizontal, -SetupGrid.margin)
     }
   }
 }
@@ -192,24 +186,14 @@ struct ReadyPage: View {
   @Environment(AppState.self) private var state
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      HStack(alignment: .top, spacing: 14) {
-        Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-          .resizable()
-          .frame(width: 64, height: 64)
-          .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 4) {
-          Text(readiness.heading)
-            .font(.title2.weight(.semibold))
-            .accessibilityAddTraits(.isHeader)
-          Text(
-            """
-            It stays quiet until it sees a faster way, a risk, or a dead end in what you are \
-            doing. Then a note appears under the menu bar, with the reason.
-            """
-          )
-          .fixedSize(horizontal: false, vertical: true)
-        }
+    VStack(alignment: .leading, spacing: SetupGrid.sectionSpacing) {
+      SetupHero(icon: .app, title: readiness.heading) {
+        Text(
+          """
+          It stays quiet until it sees a faster way, a risk, or a dead end in what you are \
+          doing. Then a note appears under the menu bar, with the reason.
+          """
+        )
       }
 
       if !readiness.isSetUp {
@@ -218,34 +202,26 @@ struct ReadyPage: View {
             StatusLabel(line, kind: .warning)
           }
         }
+        .padding(.horizontal, SetupGrid.inset)
       }
 
-      GroupBox {
-        VStack(alignment: .leading, spacing: 10) {
-          ConsentMarkRow(mark: .watching, text: "Eyes open: Athina is watching.")
-          ConsentMarkRow(mark: .idle, text: "Eyes closed in a curve: you stepped away.")
-          ConsentMarkRow(mark: .paused, text: "Eyes shut: paused, or not allowed to watch.")
+      SetupCard(title: "In the menu bar") {
+        VStack(alignment: .leading, spacing: SetupGrid.rowSpacing) {
+          SetupRow(icon: .mark(.watching), text: "Eyes open: Athina is watching.")
+          SetupRow(icon: .mark(.idle), text: "Eyes closed in a curve: you stepped away.")
+          SetupRow(icon: .mark(.paused), text: "Eyes shut: paused, or not allowed to watch.")
         }
-        .padding(6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      } label: {
-        Text("In the menu bar")
-          .accessibilityAddTraits(.isHeader)
       }
 
-      GroupBox {
+      SetupCard(title: "Talking back") {
         Text(talkBack)
           .fixedSize(horizontal: false, vertical: true)
-          .padding(6)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      } label: {
-        Text("Talking back")
-          .accessibilityAddTraits(.isHeader)
       }
 
-      Text("Everything here can be changed in Settings, which the menu opens.")
-        .font(.callout)
-        .foregroundStyle(.secondary)
+      SetupFootnote(
+        text: "Everything here can be changed in Settings, which the menu opens.",
+        secondary: true
+      )
     }
   }
 

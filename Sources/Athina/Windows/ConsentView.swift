@@ -22,42 +22,29 @@ struct ConsentPage: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      HStack(alignment: .top, spacing: 14) {
-        // As Finder draws it, masked to the app icon shape; the raw
-        // application icon image is the unmasked full-bleed artwork.
-        Image(nsImage: NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath))
-          .resizable()
-          .frame(width: 64, height: 64)
-          .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 4) {
-          Text(disclosure.title)
-            .font(.title2.weight(.semibold))
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
-          Text(disclosure.summary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
+    VStack(alignment: .leading, spacing: SetupGrid.sectionSpacing) {
+      SetupHero(icon: .app, title: disclosure.title) {
+        Text(disclosure.summary)
       }
 
-      GroupBox {
-        VStack(alignment: .leading, spacing: 10) {
-          ConsentRow(
-            symbol: "text.viewfinder",
+      SetupCard(title: disclosure.sentHeading) {
+        VStack(alignment: .leading, spacing: SetupGrid.rowSpacing) {
+          SetupRow(
+            icon: .symbol("text.viewfinder"),
             text:
               "The text on your screen, read on this Mac, and the names of the app and window in front. With Accessibility access, also the text of the field you are working in."
           )
-          ConsentRow(
-            symbol: "photo",
+          SetupRow(
+            icon: .symbol("photo"),
             text: "The latest screenshot, unless you turn that off in Models settings."
           )
-          ConsentRow(
-            symbol: "list.bullet.rectangle",
+          SetupRow(
+            icon: .symbol("list.bullet.rectangle"),
             text:
               "A summary of your recent activity, your answers to its suggestions, Athina's own notes on what you are working toward, and the contexts you declare."
           )
-          ConsentRow(
-            symbol: "bubble.left",
+          SetupRow(
+            icon: .symbol("bubble.left"),
             text:
               "Questions you ask about a suggestion. Spoken ones are turned into text on this Mac; the audio is never sent or kept."
           )
@@ -65,45 +52,26 @@ struct ConsentPage: View {
             .font(.callout)
             .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      } label: {
-        Text(disclosure.sentHeading)
-          .accessibilityAddTraits(.isHeader)
       }
 
-      GroupBox {
-        ConsentRow(symbol: "book.closed", text: retentionText)
-          .padding(6)
-          .frame(maxWidth: .infinity, alignment: .leading)
-      } label: {
-        Text("What stays on this Mac")
-          .accessibilityAddTraits(.isHeader)
+      SetupCard(title: "What stays on this Mac") {
+        SetupRow(icon: .symbol("book.closed"), text: retentionText)
       }
 
-      GroupBox {
-        VStack(alignment: .leading, spacing: 10) {
-          ConsentMarkRow(
-            mark: .watching,
+      SetupCard(title: "How to tell Athina is watching") {
+        VStack(alignment: .leading, spacing: SetupGrid.rowSpacing) {
+          SetupRow(
+            icon: .mark(.watching),
             text: "While Athina watches, the eyes in the menu bar are open."
           )
-          ConsentMarkRow(
-            mark: .paused,
-            text: pausedText
-          )
+          SetupRow(icon: .mark(.paused), text: pausedText)
         }
-        .padding(6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      } label: {
-        Text("How to tell Athina is watching")
-          .accessibilityAddTraits(.isHeader)
       }
 
-      Text(
-        "You can withdraw this at any time in Privacy settings, and Athina stops capturing and sending at once."
+      SetupFootnote(
+        text:
+          "You can withdraw this at any time in Privacy settings, and Athina stops capturing and sending at once."
       )
-      .font(.callout)
-      .fixedSize(horizontal: false, vertical: true)
     }
   }
 
@@ -123,38 +91,5 @@ struct ConsentPage: View {
     let settings = state.settings
     return
       "A journal of what Athina sees: screenshots for \(Formatting.spelledDuration(settings.thumbnailRetention)), text and events for \(Formatting.spelledDuration(settings.textRetention)), up to \(Formatting.bytes(settings.journalSizeCapBytes)) in all. Change this or clear the journal at any time in Privacy settings."
-  }
-}
-
-/// One line of the disclosure: a symbol and what it stands for.
-private struct ConsentRow: View {
-  let symbol: String
-  let text: String
-
-  var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 10) {
-      Image(systemName: symbol)
-        .foregroundStyle(.secondary)
-        .frame(width: 20)
-        .accessibilityHidden(true)
-      Text(text)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-  }
-}
-
-/// A variant of the menu bar mark as it looks in the menu bar, and what it means.
-struct ConsentMarkRow: View {
-  let mark: MenuBarMark
-  let text: String
-
-  var body: some View {
-    HStack(alignment: .center, spacing: 10) {
-      MenuBarLabelImage(mark: mark)
-        .frame(width: 20)
-        .accessibilityHidden(true)
-      Text(text)
-        .fixedSize(horizontal: false, vertical: true)
-    }
   }
 }

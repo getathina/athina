@@ -144,8 +144,12 @@ private struct ContextRow: View {
             }
           },
           icon: {
+            // In the column the pane's other list icons take (the kind tile
+            // in Never for This, an excluded app's icon), so the rows' words
+            // share one edge.
             Image(systemName: "target")
               .foregroundStyle(.tint)
+              .frame(width: 20, height: 20)
               .accessibilityHidden(true)
           }
         )

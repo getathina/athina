@@ -13,27 +13,15 @@ struct PermissionsPage: View {
   private var state
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      HStack(alignment: .top, spacing: 14) {
-        Image(systemName: "eye.circle.fill")
-          .font(.largeTitle)
-          .imageScale(.large)
-          .foregroundStyle(.tint)
-          .frame(width: 64)
-          .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Athina needs two permissions")
-            .font(.title2.weight(.semibold))
-            .accessibilityAddTraits(.isHeader)
-          Text(
-            """
-            Athina watches what you are doing so it can understand your work. What it senses \
-            stays on this Mac, in a journal you control. It connects only to \
-            \(state.settings.mentor.provider.host), and only after you save an API key.
-            """
-          )
-          .fixedSize(horizontal: false, vertical: true)
-        }
+    VStack(alignment: .leading, spacing: SetupGrid.sectionSpacing) {
+      SetupHero(icon: .symbol("eye.circle.fill"), title: "Athina needs two permissions") {
+        Text(
+          """
+          Athina watches what you are doing so it can understand your work. What it senses \
+          stays on this Mac, in a journal you control. It connects only to \
+          \(state.settings.mentor.provider.host), and only after you save an API key.
+          """
+        )
       }
 
       GroupBox(
@@ -66,15 +54,14 @@ struct PermissionsPage: View {
         }
       )
 
-      Text(
-        """
-        Idle detection needs no permission. If a permission you turned on in System Settings \
-        still shows as not granted after a few seconds, quit and reopen Athina.
-        """
+      SetupFootnote(
+        text:
+          """
+          Idle detection needs no permission. If a permission you turned on in System Settings \
+          still shows as not granted after a few seconds, quit and reopen Athina.
+          """,
+        secondary: true
       )
-      .font(.callout)
-      .foregroundStyle(.secondary)
-      .fixedSize(horizontal: false, vertical: true)
     }
     .task {
       guard !Snapshots.isActive else { return }
@@ -134,20 +121,23 @@ private struct PermissionRow: View {
   }
 
   var body: some View {
-    HStack(alignment: .center, spacing: 12) {
-      Image(systemName: symbol)
-        .font(.title2)
-        .foregroundStyle(granted ? AnyShapeStyle(StatusTint.good.color) : AnyShapeStyle(.secondary))
-        .frame(width: 32)
-        .accessibilityHidden(true)
-      VStack(alignment: .leading, spacing: 4) {
-        HStack(spacing: 8) {
-          Text(permission.title)
-            .font(.headline)
-          PermissionBadge(granted: granted)
+    // The icon sits on the title line, as every row icon in the window does;
+    // the button is centred on the whole row.
+    HStack(spacing: SetupGrid.iconToText) {
+      HStack(alignment: .top, spacing: SetupGrid.iconToText) {
+        SetupRowIcon(icon: .symbol(symbol))
+          .foregroundStyle(
+            granted ? AnyShapeStyle(StatusTint.good.color) : AnyShapeStyle(.secondary)
+          )
+        VStack(alignment: .leading, spacing: 4) {
+          HStack(spacing: 8) {
+            Text(permission.title)
+              .font(.headline)
+            PermissionBadge(granted: granted)
+          }
+          Text(permission.purpose)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        Text(permission.purpose)
-          .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       switch action {
@@ -162,7 +152,7 @@ private struct PermissionRow: View {
       }
     }
     .padding(.vertical, 10)
-    .padding(.horizontal, 4)
+    .padding(.horizontal, SetupGrid.cardPadding)
     .accessibilityElement(children: .contain)
   }
 

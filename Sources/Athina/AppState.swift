@@ -297,9 +297,13 @@ final class AppState {
       ? [] : Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
     needsPermissionsOnboarding = !status.allGranted
     speechAvailability = SpeechListener.availability()
+    // A live launch has not read its key yet (`start` does, off the main
+    // thread), so its walk through has the model page, and keeps it even
+    // once a saved key is found: the walk's pages are fixed at its start.
     setup = SetupFlow.atLaunch(
       requested: LaunchArguments.windowToOpen.flatMap(SetupPage.init(rawValue:)),
-      hasConsent: settings.hasConsent
+      hasConsent: settings.hasConsent,
+      needsKey: !clientMode.isOffline
     )
   }
 
