@@ -126,7 +126,7 @@ import Testing
     #expect(capped.hasSuffix("3:00 PM."))
     #expect(
       UserFacing.sentence(for: .notSent("the model is unknown"), provider: provider)
-        == "Athina did not send the call, since the model is unknown."
+        == "Athina did not ask, since the model is unknown."
     )
   }
 

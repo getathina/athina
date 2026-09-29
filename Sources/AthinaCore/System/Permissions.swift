@@ -57,14 +57,15 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
     switch self {
     case .screenRecording:
       """
-      Lets Athina capture the display you are working on when what you are doing changes, \
-      and read its text on this Mac. Frames stay in the local journal. Only the latest \
-      screenshot goes to the mentor model, and Models settings can turn that off.
+      Lets Athina take a screenshot of the display you are working on when what you are doing \
+      changes, and read its text on this Mac. Screenshots stay on this Mac. Only the latest one \
+      is sent with a question about your screen, and Models settings can turn that off.
       """
     case .accessibility:
       """
-      Lets Athina read the app, window title, and focused element you are using, so it knows \
-      what you are working on without guessing from pixels.
+      Lets Athina read the title of the window in front and the text of the field you are \
+      working in, so it knows what you are working on and can outline the spot a suggestion \
+      is about.
       """
     case .microphone:
       """
@@ -73,8 +74,8 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
       """
     case .speechRecognition:
       """
-      Lets Athina turn what you say into text on this Mac, with Apple's on-device recognizer \
-      and never its servers. When you ask a question, those words go to the mentor model.
+      Lets Athina turn what you say into text on this Mac; nothing you say leaves it. When you \
+      ask a question, only its words are sent, as a typed question would be.
       """
     }
   }

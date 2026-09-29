@@ -94,9 +94,9 @@ struct MentorshipContextsSection: View {
         Text(
           settingsMarkdown:
             """
-            Triage places each moment in one of your contexts as part of the judgment it \
-            already makes, so contexts cost no extra call. To keep an app from being looked at \
-            at all, exclude it in \(SettingsPane.privacy.link("Privacy settings")).
+            Each moment is placed in one of your contexts as part of the quick look Athina \
+            already takes, at no extra cost. To keep an app from being looked at at all, \
+            exclude it in \(SettingsPane.privacy.link("Privacy settings")).
             """
         )
         .settingsPaneLinks()
@@ -250,7 +250,8 @@ struct ContextEditor: View {
             Text(
               """
               A short name in your own words, and optionally a sentence saying what counts. \
-              Both go to the triage model, which answers with this name when it places you here.
+              Both are sent with each quick look at your screen, and this name comes back when \
+              it places you here.
               """
             )
           }

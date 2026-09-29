@@ -3,7 +3,7 @@ import Foundation
 /// What the debug panel's Latest frame pane says while it has no frame.
 ///
 /// It names the reason there is none now, read from the sensing mode and
-/// whether Clear Journal just took the last frame away, rather than one fixed
+/// whether Delete Everything just took the last frame away, rather than one fixed
 /// line that blames Screen Recording even when it is granted.
 public struct EmptyFrame: Equatable, Sendable {
   /// The empty state's title, in title case.

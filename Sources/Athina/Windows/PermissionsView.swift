@@ -17,9 +17,9 @@ struct PermissionsPage: View {
       SetupHero(icon: .symbol("eye.circle.fill"), title: "Athina needs two permissions") {
         Text(
           """
-          Athina watches what you are doing so it can understand your work. What it senses \
-          stays on this Mac, in a journal you control. It connects only to \
-          \(state.settings.mentor.provider.host), and only after you save an API key.
+          Athina watches what you are doing so it can understand your work. What it sees stays \
+          on this Mac, for as long as you choose. It sends to \
+          \(state.settings.mentor.provider.name) only, and only after you save an API key.
           """
         )
       }

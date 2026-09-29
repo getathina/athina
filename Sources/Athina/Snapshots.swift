@@ -76,7 +76,7 @@ enum Snapshots {
     let atCap = AppState.sampleAtContextCap()
     let noSpeech = AppState.sample(
       speechAvailability: .unavailable(
-        reason: "On-device speech recognition is not available for Welsh, so talking back is off."
+        reason: "Speech in Welsh cannot be understood on this Mac, so talking back is off."
       )
     )
     let noUnderstanding = AppState.sampleUnderstanding(.none)

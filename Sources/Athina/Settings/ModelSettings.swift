@@ -47,9 +47,9 @@ struct ModelSettings: View {
             """
             The triage model takes a quick look whenever what you are doing changes and \
             decides whether the mentor model should look closer. The understanding model \
-            rewrites what Athina believes you are working toward, only when no mentor call has \
-            done so recently. Effort sets how much a model thinks before answering and is sent \
-            only to models that accept it. Each provider keeps its own choices.
+            rewrites what Athina believes you are working toward, only when the mentor model \
+            has not done so recently. Effort sets how much a model thinks before answering, \
+            for the models that offer the choice. Each provider keeps its own choices.
             """
           )
         }
@@ -85,7 +85,7 @@ struct ModelSettings: View {
             help:
               """
               Triage is skipped when this much of a window's text matches the last time it was \
-              triaged.
+              looked at.
               """
           )
         },
@@ -119,9 +119,10 @@ struct ModelSettings: View {
         footer: {
           Text(
             """
-            The triage model receives text only: the app and window, the focused element, the \
-            latest screen's recognized text, and a short summary of recent events. Excluded \
-            apps and secure text fields are never captured, so they never reach either model.
+            The triage model receives text only: the app and window, the field you are working \
+            in, the text read from the latest screen, and a short summary of recent events. \
+            Excluded apps and password fields are never captured, so they never reach either \
+            model.
             """
           )
         }
@@ -199,8 +200,7 @@ private struct TierRows: View {
         if !supportsEffort {
           Text(
             """
-            \(ModelCatalog.displayName(for: model)) does not accept an effort setting, so none \
-            is sent.
+            \(ModelCatalog.displayName(for: model)) does not offer a choice of effort.
             """
           )
         }
@@ -259,7 +259,9 @@ private struct APIKeySection<Leading: View>: View {
           StatusLabel(APIKeyEntry.saveFailure, kind: .error)
         }
         if let error = state.apiKeyError {
+          // The code's own text stays a tooltip away, as a failed call's does.
           StatusLabel(error, kind: .error)
+            .help(state.apiKeyErrorDetail ?? "")
         }
         LabeledContent("Saved key") {
           if let hint = state.apiKeyHint {
@@ -333,13 +335,13 @@ private struct APIKeySection<Leading: View>: View {
   private var footer: String {
     var text =
       """
-      Calls are billed to your own account with \(provider.name), with the key you add here, \
-      and choosing a provider that sends to another company asks for your consent again. The \
-      key stays in your login keychain and is never written to the journal, the logs, or the \
-      debug panel. Athina connects only to \(provider.host), and only while a key is saved.
+      Everything Athina asks is billed to your own account with \(provider.name), with the key \
+      you add here, and choosing a provider that sends to another company asks for your \
+      consent again. The key is kept safely on this Mac, shown to no one, and sent only to \
+      \(provider.name), and nothing is sent until one is saved.
       """
     if provider == .openCode {
-      text += " OpenCode passes each call to Anthropic or OpenAI, whichever makes the model."
+      text += " OpenCode passes what it is asked to Anthropic or OpenAI, whichever makes the model."
     }
     return text
   }
@@ -457,7 +459,7 @@ struct ConnectionResult: View {
         ProgressView()
           .controlSize(.small)
           .accessibilityHidden(true)
-        Text(replayed ? "Replaying the recorded test call…" : "Contacting \(provider.host)…")
+        Text(replayed ? "Replaying the recorded test call…" : "Contacting \(provider.name)…")
       }
     } else if let result {
       switch result {
@@ -527,8 +529,8 @@ struct SpendSection: View {
           step: 0.25,
           help:
             """
-            Calls slow down as the hour's estimated spend nears this amount and stop at it \
-            until the next hour begins.
+            Athina asks less often as the hour's estimated spend nears this amount and stops \
+            at it until the next hour begins.
             """,
           identifier: "models.spendCap"
         )
@@ -543,7 +545,7 @@ struct SpendSection: View {
         if !limitOnly {
           Text(
             """
-            Cost is estimated from the tokens each response reports and these prices, in \
+            Cost is estimated from the tokens each answer reports and these prices, in \
             dollars per million tokens, across every provider. Update them when \
             \(state.settings.mentor.provider.name)'s pricing changes.
             """
@@ -570,11 +572,11 @@ private struct SpendDetailRows: View {
           let spend =
             """
             \(Formatting.dollars(status.spendThisHour)) over \
-            \(Plural.count(status.callsThisHour, "call", "calls"))
+            \(Plural.count(status.callsThisHour, "question", "questions"))
             """
           Text(
             status.isCadenceSlowed
-              ? "\(spend), calls slowed \(Formatting.multiplier(status.cadenceMultiplier))"
+              ? "\(spend), slowed \(Formatting.multiplier(status.cadenceMultiplier))"
               : spend
           )
           .monospacedDigit()

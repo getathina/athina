@@ -133,10 +133,11 @@ struct SetupRow: View {
   }
 }
 
-/// A row's icon, centred in the icon column at the height of one body line,
-/// so a row's first line and its icon share a centre whatever the icon. A
-/// symbol takes the foreground style it is given; the mark is a template
-/// image and takes it too.
+/// A row's icon, centred in the icon column at the height of one body line.
+///
+/// A row's first line and its icon then share a centre whatever the icon. A
+/// symbol takes the foreground style it is given, and so does the mark, a
+/// template image.
 struct SetupRowIcon: View {
   let icon: SetupRow.Icon
 

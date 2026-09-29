@@ -258,7 +258,7 @@ public enum UnderstandingExpiry: Equatable, Sendable {
 /// One stored revision of the understanding.
 ///
 /// Revisions are inserted, never updated, so the journal keeps the trail of how
-/// the reading developed and retention and Clear Journal treat them like every
+/// the reading developed and retention and Delete Everything treat them like every
 /// other journal row.
 public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
   /// The revision's journal id, or 0 before it is journaled.

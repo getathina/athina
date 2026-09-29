@@ -45,8 +45,8 @@ struct TroubleshootingSection: View {
           Text("Enable debug panel")
           Text(
             """
-            A window for troubleshooting Athina: the latest capture and the text read from \
-            it, each model call and why it was made, and what Athina understands you to be \
+            A window for troubleshooting Athina: the latest screenshot and the text read from \
+            it, each question put to a model and why, and what Athina understands you to be \
             working toward.
             """
           )

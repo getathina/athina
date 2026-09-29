@@ -3,16 +3,16 @@
   import Testing
 
   extension Scenarios {
-    /// Right after Clear Journal, the debug panel's Latest frame pane says the journal was cleared
+    /// Right after Delete Everything, the debug panel's Latest frame pane says the journal was cleared
     /// and the next capture appears there, not that Screen Recording is missing; the Mentor loop
-    /// card names no observation, model call or callout Clear Journal deleted; and the next capture
+    /// card names no observation, model call or callout Delete Everything deleted; and the next capture
     /// fills the pane again.
     ///
     /// Clearing deletes every observation, so the pane is empty until the next capture, while the
     /// status bar above it still shows Screen Recording granted and the mode watching; a pane that
     /// blamed the permission then named the wrong cause. The card's records of the triage gate,
     /// the last calls and the last callout described rows that were gone. The suggestion comes
-    /// from scripted sensing (docs/e2e.md "Scripted sensing"), Clear Journal is chosen in
+    /// from scripted sensing (docs/e2e.md "Scripted sensing"), Delete Everything is chosen in
     /// Settings > Privacy through Athina's own event path, and a hermetic run senses nothing it
     /// does not script, so the panel is read with no capture since the clear.
     @Test func `debug-panel-cleared`() async {
@@ -64,7 +64,7 @@
         // A row the card already showed empty would pass below without proving anything, so the
         // scenario stops unless each one describes something first.
         for (label, cleared) in records where field(before, label) == cleared {
-          throw AppProcess.Failure("\(label) showed nothing to clear before Clear Journal")
+          throw AppProcess.Failure("\(label) showed nothing to clear before Delete Everything")
         }
 
         run.check(
@@ -88,12 +88,14 @@
         // it is pressed as VoiceOver presses it.
         let clear = Target.identifier("journal.clear", in: "Privacy")
         _ = try await control.scroll(clear)
-        run.check("Clear Journal… is pressed", true, try await control.press(clear).ok)
-        let confirm = Target.role("AXButton", label: "Clear Journal", in: "Privacy")
+        run.check("Delete Everything… is pressed", true, try await control.press(clear).ok)
+        let confirm = Target.role("AXButton", label: "Delete Everything", in: "Privacy")
         run.check(
           "the confirmation comes up",
-          "Clear Journal",
-          try await run.settled("Clear Journal") { try await control.first(confirm)?.label ?? "" }
+          "Delete Everything",
+          try await run.settled("Delete Everything") {
+            try await control.first(confirm)?.label ?? ""
+          }
         )
         // The press takes the alert down while it is still being answered, so its reply can
         // come back as a failure (-25205) after it cleared the journal; the empty journal

@@ -159,9 +159,9 @@ struct ModelPage: View {
       SetupHero(icon: .symbol("key.fill"), title: "Connect a model") {
         Text(
           """
-          Athina asks the model you choose, with your own API key, and every call is billed \
-          to your account. Nothing is sent until a key is saved, and spending stops at the \
-          hourly limit.
+          Athina asks the model you choose, with your own API key, and everything it asks is \
+          billed to your account. Nothing is sent until a key is saved, and spending stops at \
+          the hourly limit.
           """
         )
       }
@@ -170,12 +170,14 @@ struct ModelPage: View {
         SpendSection(limitOnly: true)
       }
       .formStyle(.grouped)
-      // On the window's own background, as the other pages are; it scrolls
-      // when a key's error or a replay's rows make it taller. The form draws
-      // its cards `SetupGrid.margin` inside its own edge, so it reaches the
+      // On the window's own background, as the other pages are, and tall
+      // enough for every provider's rows and footer, a failed key's line
+      // included, so nothing scrolls and no scroll bar crowds the cards' right
+      // edge; only a replay's extra rows make it scroll. The form draws its
+      // cards `SetupGrid.margin` inside its own edge, so it reaches the
       // window's edges and its cards land on the page's.
       .scrollContentBackground(.hidden)
-      .frame(height: 410)
+      .frame(height: 440)
       .padding(.horizontal, -SetupGrid.margin)
     }
   }

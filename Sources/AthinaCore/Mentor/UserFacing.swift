@@ -28,7 +28,7 @@ public enum UserFacing {
     case .replay:
       return "There is no recorded answer to replay for this call."
     case .notSent(let reason):
-      return holdSentence(forLabel: reason) ?? "Athina did not send the call, since \(reason)."
+      return holdSentence(forLabel: reason) ?? "Athina did not ask, since \(reason)."
     }
   }
 
@@ -55,7 +55,7 @@ public enum UserFacing {
     case .notSensing:
       "Athina did not ask: it is not watching right now."
     case .callInFlight:
-      "Athina did not ask: another call was still in flight."
+      "Athina did not ask: it was still waiting for an earlier answer."
     case .spendCapReached(let until):
       """
       Athina did not ask: this hour's spend limit is reached. It can ask again at \

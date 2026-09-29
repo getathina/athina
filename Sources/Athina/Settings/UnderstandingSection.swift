@@ -16,7 +16,7 @@ struct UnderstandingSection: View {
         if let record = state.mentorStatus.understanding, let goal = record.content.primaryGoal {
           LabeledContent(
             content: {
-              Text("Revision \(record.revision)")
+              Text("Version \(record.revision)")
             },
             label: {
               Text("Current goal")
@@ -24,7 +24,7 @@ struct UnderstandingSection: View {
               Text(
                 """
                 \(Formatting.tokens(record.content.estimatedTokens)) tokens, \
-                \(Formatting.dollars(record.cumulativeCost)) in refresh calls
+                \(Formatting.dollars(record.cumulativeCost)) spent refreshing it
                 """
               )
             }
@@ -42,9 +42,9 @@ struct UnderstandingSection: View {
           range: MentorSettings.refreshIntervalRange,
           help:
             """
-            Every mentor call also rewrites the understanding, at no extra cost. After at \
-            least this much active use with no mentor call, Athina makes a refresh call of its \
-            own.
+            Whenever the mentor model looks closer it also rewrites the understanding, at no \
+            extra cost. After at least this much active use without that, Athina asks for a \
+            refresh of its own.
             """,
           identifier: "understanding.refreshInterval"
         )
@@ -83,8 +83,8 @@ struct UnderstandingSection: View {
             Athina keeps a short written record of what you appear to be working toward and \
             what has happened so far, so it can judge what you do against that goal rather \
             than recent screens alone. The model writes it, and once it is forgotten Athina \
-            starts a fresh one. Its revisions stay in the journal on this Mac until they are \
-            reset here, or age out or are cleared with the rest of the journal in \
+            starts a fresh one. Earlier versions stay on this Mac until they are reset here, \
+            age out, or are cleared with everything else Athina keeps in \
             \(SettingsPane.privacy.link("Privacy settings")).
             """
         )
@@ -112,7 +112,7 @@ struct ResetUnderstandingButton: View {
     .accessibilityIdentifier("understanding.reset")
     .disabled(state.mentorStatus.understanding == nil || resetting)
     // Resetting is what the person just chose, so the confirming button
-    // is the plain default and Cancel stays available, as for Clear Journal.
+    // is the plain default and Cancel stays available, as for Delete Everything.
     .confirmationDialog(
       "Reset the understanding?",
       isPresented: $confirming,

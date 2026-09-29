@@ -147,10 +147,13 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
   }
 
-  @Test func eachDisclosureNamesItsRecipientAndHost() {
+  /// The page names the company that receives what is sent, never the host
+  /// it is sent to, which says nothing to the person deciding.
+  @Test func eachDisclosureNamesItsRecipientAndNotItsHost() {
     for provider in ModelProvider.allCases {
       let disclosure = ConsentDisclosure(for: provider)
-      #expect(disclosure.destination.contains(provider.host))
+      #expect(disclosure.destination.contains("only to \(provider.name)"))
+      #expect(!disclosure.destination.contains(provider.host))
       #expect(disclosure.sentHeading == "What is sent to \(provider.name)")
     }
     #expect(ConsentDisclosure(for: .openAI).summary.contains("OpenAI"))

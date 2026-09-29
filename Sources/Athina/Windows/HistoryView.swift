@@ -326,22 +326,13 @@ struct SuggestionDetail: View {
         Divider()
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
           detailRow("When", Formatting.dayAndTime(suggestion.timestamp))
-          detailRow(
-            "App",
-            suggestion.bundleID.map { "\(suggestion.appName) (\($0))" } ?? suggestion.appName
-          )
+          detailRow("App", suggestion.appName)
           if let title = suggestion.windowTitle, !title.isEmpty {
             detailRow("Window", title)
           }
           detailRow("Category", suggestion.category.label)
           detailRow("Confidence", String(format: "%.0f%%", suggestion.confidence * 100))
-          detailRow(
-            "Model",
-            """
-            \(ModelCatalog.displayName(for: suggestion.model)), prompt \
-            v\(suggestion.promptVersion)
-            """
-          )
+          detailRow("Model", ModelCatalog.displayName(for: suggestion.model))
           if let feedback = suggestion.feedback {
             detailRow(
               "Feedback",
@@ -352,10 +343,7 @@ struct SuggestionDetail: View {
           if let region = suggestion.region {
             detailRow(
               "Callout",
-              """
-              \(suggestion.calloutShown ? "Shown" : "Not shown"): \"\(region.note)\" at \
-              \(Formatting.rect(region.rect)) px of the frame
-              """
+              "\(suggestion.calloutShown ? "Shown" : "Not shown"), outlining \"\(region.note)\""
             )
           } else {
             detailRow("Callout", "None: the suggestion did not point at one spot")

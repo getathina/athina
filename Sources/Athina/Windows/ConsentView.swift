@@ -85,11 +85,11 @@ struct ConsentPage: View {
       "While it is paused or not allowed to watch, its eyes are shut. Pause it at any time \(pause)."
   }
 
-  /// What the journal keeps, from the settings in force, so the window
-  /// never promises a retention the person has changed.
+  /// What is kept on this Mac and for how long, from the settings in force,
+  /// so the window never promises a retention the person has changed.
   private var retentionText: String {
     let settings = state.settings
     return
-      "A journal of what Athina sees: screenshots for \(Formatting.spelledDuration(settings.thumbnailRetention)), text and events for \(Formatting.spelledDuration(settings.textRetention)), up to \(Formatting.bytes(settings.journalSizeCapBytes)) in all. Change this or clear the journal at any time in Privacy settings."
+      "What Athina sees: screenshots for \(Formatting.spelledDuration(settings.thumbnailRetention)), text and events for \(Formatting.spelledDuration(settings.textRetention)), up to \(Formatting.bytes(settings.journalSizeCapBytes)) in all. Change this or delete it all at any time in Privacy settings."
   }
 }
