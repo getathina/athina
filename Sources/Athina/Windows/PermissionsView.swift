@@ -102,7 +102,9 @@ private struct PermissionRows: View {
             if granted, !was { Announce.post("\(permission.title) granted") }
           }
         if permission != permissions.last {
+          // Between the words' edges, as the form's row separators are.
           Divider()
+            .padding(.horizontal, SetupGrid.cardPadding)
         }
       }
     }

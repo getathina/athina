@@ -18,7 +18,7 @@ enum SetupGrid {
   static let inset: CGFloat = 10
   /// A group box pads its content this much itself, so a card's content adds
   /// only the rest of `inset`.
-  static let groupBoxPadding: CGFloat = 6
+  static let groupBoxPadding: CGFloat = 5
   /// What a card's content adds to the group box's own padding.
   static let cardPadding: CGFloat = inset - groupBoxPadding
   /// The column a row's icon is centred in: wide enough for the menu bar
