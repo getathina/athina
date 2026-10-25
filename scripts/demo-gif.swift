@@ -5,11 +5,11 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-// Cuts the README's demo GIF from the recording the `demo` end-to-end scenario
+// Cuts the demo GIF from the recording the `demo` end-to-end scenario
 // makes (scripts/e2e/scenarios/demo.sh): the top of the real screen, 1728
 // points wide, while the committed fixtures replay. A frame that held both the
 // script at the left and the note at the top right would be the whole width of
-// the display, unreadable at the 800 pixels GitHub shows it at, so the GIF
+// the display, unreadable at the 800 pixels a README shows it at, so the GIF
 // follows the screen with a camera: a frame half the display's width, at the
 // display's own pixel scale, that pulls back to the whole width for the moment
 // the note and the callout arrive together, then closes in on the callout,

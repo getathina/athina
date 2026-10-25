@@ -649,7 +649,7 @@ struct Shot: ParsableCommand {
     func run() throws {
       // What the display shows, at its own pixel scale, the pointer included
       // wherever it is, in a QuickTime movie with a frame for each change of
-      // the picture: the README's demo is cut from one (scripts/demo-gif.swift).
+      // the picture: the demo GIF is cut from one (scripts/demo-gif.swift).
       // The recording ends on its own after the seconds asked for, so a run
       // that is killed leaves no recorder behind.
       let (region, seconds, out) = try recording()

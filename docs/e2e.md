@@ -139,7 +139,7 @@ A change that touches none of those takes no screen time.
 | `settings-corrections` | api | Settings > Models' Spend at most names its range, takes $5,000 and $0 typed as $1,000.00 and $0.05, saying so in the row and to VoiceOver, and takes $3 as typed with no correction; a replayed Test Connection's result is announced |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once, listed by the live query of the journal rather than once from a load and again from a write |
 | `launch-arguments` | api | `--open settings:advanced` after a flag that takes no value (`--allow-stale-fixtures`) still opens Settings on that pane, where AppKit once took the pane's name for a document to open and opened no window |
-| `demo` | screen | records the README's demo from the real screen (`demo.mov` in its evidence): the committed fixtures' own scene in TextEdit, the switch to the script, the note under the menu bar with the callout on the script's line, and Tell Me More opening the explanation, checking each along the way; it runs only when named, since a run of every scenario is a check and this is a recording, and `make demo` cuts the GIF from it (see [The committed fixtures](replay.md#the-committed-fixtures)) |
+| `demo` | screen | records the demo from the real screen (`demo.mov` in its evidence): the committed fixtures' own scene in TextEdit, the switch to the script, the note under the menu bar with the callout on the script's line, and Tell Me More opening the explanation, checking each along the way; it runs only when named, since a run of every scenario is a check and this is a recording, and `make demo` cuts the GIF from it (see [The committed fixtures](replay.md#the-committed-fixtures)) |
 
 A scenario prints one JSON line on the harness's standard output, with the
 log on its standard error: its name, `pass`, `fail` or `skip`, how long
@@ -219,7 +219,7 @@ a negative coordinate or a title starting with a dash included.
 | `park <x> <y>` | move the pointer to a point, in points from the top left of the main display: out of a recording's picture, which takes it in wherever it is |
 | `shot window <id> <out.png>` | capture a window by id |
 | `shot region <x> <y> <w> <h> <out.png>` | capture a region of the screen |
-| `shot video <x> <y> <w> <h> <seconds> <out.mov>` | record a region of the screen for that many seconds, at the display's pixel scale with a frame for each change, the pointer included wherever it is, ending on its own; what `demo` cuts the README's GIF from |
+| `shot video <x> <y> <w> <h> <seconds> <out.mov>` | record a region of the screen for that many seconds, at the display's pixel scale with a frame for each change, the pointer included wherever it is, ending on its own; what `make demo` cuts the demo GIF from |
 | `api <command> [<key=value> ...]` | one request to a replay's control API, in `ATHINA_CONTROL_DIR` (the harness sets it); prints the answer, or one field of it with `--field <path>` such as `elements.0.enabled`; exit 0 when the answer is ok, 1 when not, 2 when no app answered |
 
 The maths behind them is a plain library (`Sources/AthinaE2E`) with unit

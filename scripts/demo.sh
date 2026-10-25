@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# `make demo`: records the README's demo from the real screen and cuts the GIF
-# from it. The recording is the end-to-end harness's `demo` scenario
+# `make demo`: records the demo from the real screen and cuts the GIF from it.
+# The recording is the end-to-end harness's `demo` scenario
 # (scripts/e2e/scenarios/demo.sh), a replay of the committed fixtures with no
 # key and nothing spent, which takes the screen lock and waits for a quiet
 # keyboard and mouse first; the GIF is scripts/demo-gif.swift's cut of the
-# recording, written to docs/images/demo.gif with every frame beside it in
-# build/demo-frames to look at before committing (docs/replay.md "The
+# recording, written to build/demo.gif with every frame beside it in
+# build/demo-frames to look at before using it anywhere (docs/replay.md "The
 # committed fixtures"). Ends in one summary line; the scenario's log is in
 # build/logs/demo.log.
 #
@@ -23,5 +23,5 @@ if [ "$(jq -r '.result' <<<"$result" 2>/dev/null)" != pass ]; then
 fi
 recording="$(jq -r '.evidence' <<<"$result")/demo.mov"
 rm -rf build/demo-frames
-swift scripts/demo-gif.swift "$recording" docs/images/demo.gif --frames build/demo-frames || exit 1
-echo "demo: docs/images/demo.gif cut from $recording; its frames are in build/demo-frames"
+swift scripts/demo-gif.swift "$recording" build/demo.gif --frames build/demo-frames || exit 1
+echo "demo: build/demo.gif cut from $recording; its frames are in build/demo-frames"

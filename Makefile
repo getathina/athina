@@ -83,7 +83,7 @@ snapshots-smoke: ## CI's snapshots-smoke check reproduced; drifts on a Mac unlik
 icons: ## redraw the app icon, menu bar mark and README icon from Resources/Mark
 	swift scripts/mark-assets.swift .
 
-demo: ## record the README's demo GIF from the real screen, replaying the committed fixtures (docs/replay.md)
+demo: ## record a demo GIF of the real screen replaying the committed fixtures, into build/demo.gif (docs/replay.md)
 	@scripts/demo.sh
 
 measure: ## the running app's CPU and memory over 60 seconds

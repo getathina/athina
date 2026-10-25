@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
-# The README's demo, recorded from the real screen: the committed fixtures'
+# The demo, recorded from the real screen: the committed fixtures'
 # own scene (harness.sh stage_scenario_documents), replayed as `make run`
 # replays it, with the top of the screen recorded from the moment before the
 # window switch that brings the note to the moment after Tell Me More.
@@ -21,7 +21,7 @@
 # beyond the one the demo is about, so what the recording shows is what a
 # person would see. The GIF is cut from the recording afterwards by
 # scripts/demo-gif.swift (docs/replay.md "The committed fixtures").
-SCENARIO_SUMMARY="records the README's demo from the real screen: the fixtures' scene in TextEdit, the switch to the script, the note under the menu bar with the callout on the script's line, and Tell Me More opening the explanation; the recording is demo.mov in the run's evidence"
+SCENARIO_SUMMARY="records the demo from the real screen: the fixtures' scene in TextEdit, the switch to the script, the note under the menu bar with the callout on the script's line, and Tell Me More opening the explanation; the recording is demo.mov in the run's evidence"
 SCENARIO_CONTROL=yes
 SCENARIO_IDLE_FIRST=yes
 # Only when named: a run of every scenario is a check, and this is a recording.

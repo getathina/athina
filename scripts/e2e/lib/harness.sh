@@ -205,8 +205,8 @@ scenario_tier_of() {
 }
 
 # A real-screen scenario that says SCENARIO_ON_REQUEST=yes runs only when it
-# is named: the demo records the README's GIF, which a run of every scenario
-# has no use for.
+# is named: the demo is a recording, which a run of every scenario has no use
+# for.
 scenario_on_request() {
 	[ -f "$SCENARIO_DIR/$1.sh" ] && grep -q '^SCENARIO_ON_REQUEST=yes$' "$SCENARIO_DIR/$1.sh"
 }
