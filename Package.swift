@@ -53,7 +53,7 @@ let package = Package(
     .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "3.1.0"),
     // Only for the UI smoke test, and fetched only with its trait on; the one
     // product used is SnapshotTesting.
-    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
+    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.7"),
   ],
   targets: [
     .target(
