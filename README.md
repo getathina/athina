@@ -21,7 +21,7 @@
 
 **Status:** early. Athina runs on macOS 26 or later, and feedback is wanted:
 [issues](https://github.com/getathina/athina/issues) are welcome. It is
-open source under the [MIT License](LICENSE).
+open source under the [Apache License 2.0](LICENSE).
 
 ## Overview
 
