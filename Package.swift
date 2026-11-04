@@ -44,7 +44,7 @@ let package = Package(
     // depends on another package.
     //
     // The journal's SQLite access and its live queries (Journal.swift).
-    .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1"),
+    .package(url: "https://github.com/groue/GRDB.swift", exact: "7.12.0"),
     // The command lines of athina-drive and snapshot-diff, the developer
     // tools; the app and its release builds never link it.
     .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
@@ -53,7 +53,7 @@ let package = Package(
     .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "3.1.0"),
     // Only for the UI smoke test, and fetched only with its trait on; the one
     // product used is SnapshotTesting.
-    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
+    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.7"),
   ],
   targets: [
     .target(
