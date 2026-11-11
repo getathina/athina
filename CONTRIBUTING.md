@@ -56,6 +56,7 @@ make run-live SPEND=1        # builds and launches the live app, replacing only 
 make record SPEND=1          # the same, writing every model call to a fixture file (spends API credits; refused without SPEND=1)
 make snapshots-smoke         # the UI smoke test as CI runs it, compared with the runner's references, which a Mac unlike the runner drifts from
 make icons                   # rebuilds the app icon and the README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaGaze.svg (their outputs are committed, so a plain build never needs it)
+make demo                    # records a demo GIF of the real screen replaying the committed fixtures into build/demo.gif, not committed (takes the screen; see docs/replay.md)
 make measure                 # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release                 # builds, signs, notarizes, and packages a direct-download release into build/release (see docs/releasing.md)
 make clean                   # removes every build product
