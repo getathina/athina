@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/getathina/athina/compare/v0.2.0...v0.2.1) (2026-11-11)
+
+
+### Bug fixes
+
+* keep a just-shown note out of screen captures and add a make demo recording ([#135](https://github.com/getathina/athina/issues/135)) ([05cc7a7](https://github.com/getathina/athina/commit/05cc7a7f7278454364283df724476dced2313e7a))
+
 ## [0.2.0](https://github.com/getathina/athina/compare/v0.1.0...v0.2.0) (2026-09-29)
 
 
