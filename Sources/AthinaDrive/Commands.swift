@@ -417,7 +417,7 @@ struct Sweep: ParsableCommand {
     // a file of the same name, notes.txt say, is not touched.
     let directory =
       URL(fileURLWithPath: try Words.text(words, ["directory"])[0])
-      .standardizedFileURL.path + "/"
+      .resolvingSymlinksInPath().path + "/"
     let app = AXUIElementCreateApplication(pid.value)
     func mine() -> [AXUIElement] {
       let windows = (attr(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
@@ -425,7 +425,7 @@ struct Sweep: ParsableCommand {
         guard let document = attr(window, kAXDocumentAttribute) as? String,
           let url = URL(string: document), url.isFileURL
         else { return false }
-        return url.standardizedFileURL.path.hasPrefix(directory)
+        return url.resolvingSymlinksInPath().path.hasPrefix(directory)
       }
     }
     var closed = 0
