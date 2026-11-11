@@ -12,13 +12,6 @@
 
 <h3 align="center"><strong>A live mentor for your Mac.</strong> It watches how you work and shows you a better way when there is one.</h3>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="Tests/Snapshots/toast-dark.png">
-    <img src="Tests/Snapshots/toast-light.png" width="382" alt="An Athina note under the menu bar: its kind tile and the app, a short title, a sentence saying why, and the buttons Tell Me More, Not Now and Never for This">
-  </picture>
-</p>
-
 **Status:** early. Athina runs on macOS 26 or later, and feedback is wanted:
 [issues](https://github.com/getathina/athina/issues) are welcome. It is
 open source under the [MIT License](LICENSE).
