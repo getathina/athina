@@ -48,7 +48,7 @@
 - **The understanding is model-written prose about the work**, kept in the
   journal on this Mac like everything else, readable in full in the debug
   panel, bounded by its token budget, expiring with the idle gap and at a new
-  day, and removable at any time with Reset Understanding or Clear Journal.
+  day, and removable at any time with Reset Understanding or Delete Everything.
   The menu bar menu shows its strongest goal, clipped, alongside the debug
   panel and Settings > Models, whenever Athina is on and has a key.
   Both prompts that write it, the mentor prompt and the refresh prompt, tell
@@ -82,7 +82,7 @@
   (`~/Library/Application Support/athina/recordings` unless another directory is
   given, mode 0700, files 0600). The key the call went with is never written,
   and any Anthropic key visible in the screen text is redacted, though not
-  inside the screenshot. Deleting that directory deletes them; Clear Journal does not. A
+  inside the screenshot. Deleting that directory deletes them; Delete Everything does not. A
   replay (`--replay`) sends nothing anywhere, keeps its own journal and
   settings, and starts from the live settings (or a `--settings` file it never
   writes), so excluded apps stay excluded while replaying.

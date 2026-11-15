@@ -790,7 +790,7 @@ struct ToastContent: View {
             case .waiting(let question):
               ThinkingRow(
                 question: question,
-                status: "Your question is next, once Athina finishes another call."
+                status: "Your question is next, once Athina finishes what it is asking."
               )
             case .thinking(let question):
               ThinkingRow(question: question, status: "Asking the mentor…")

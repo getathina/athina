@@ -29,7 +29,7 @@ struct SuggestionsSection: View {
           value: $state.settings.mentor.minimumConfidence,
           range: 0...1,
           step: 0.05,
-          help: "Suggestions the model is less sure of are logged but not shown."
+          help: "Suggestions the model is less sure of are not shown."
         )
         NumberRow(
           "Show each suggestion for",

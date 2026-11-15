@@ -38,7 +38,7 @@ final class SpeechListener {
 
     var description: String {
       switch self {
-      case .unavailable: "on-device speech recognition is not available"
+      case .unavailable: "speech is not understood in this language"
       case .noInput: "no microphone input is available"
       case .alreadyListening: "already listening"
       }
@@ -61,11 +61,11 @@ final class SpeechListener {
   static func availability(for locale: Locale = .current) -> Availability {
     let name = locale.localizedString(forIdentifier: locale.identifier) ?? locale.identifier
     guard let recognizer = SFSpeechRecognizer(locale: locale) else {
-      return .unavailable(reason: "No speech recognizer exists for \(name).")
+      return .unavailable(reason: "Speech in \(name) is not understood, so talking back is off.")
     }
     guard recognizer.supportsOnDeviceRecognition else {
       return .unavailable(
-        reason: "On-device speech recognition is not available for \(name), so talking back is off."
+        reason: "Speech in \(name) cannot be understood on this Mac, so talking back is off."
       )
     }
     return .available(locale: name)

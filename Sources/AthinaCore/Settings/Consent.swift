@@ -38,8 +38,8 @@ public struct Consent: Codable, Equatable, Sendable {
 
   /// The version of what the consent page discloses.
   ///
-  /// Bump it when what leaves the Mac, who receives it, or what the journal
-  /// keeps changes in a way the person would want to hear about: an Allow
+  /// Bump it when what leaves the Mac, who receives it, or what is kept on
+  /// the Mac changes in a way the person would want to hear about: an Allow
   /// given to an older disclosure no longer counts, and the window asks
   /// again.
   public static let disclosureVersion = 1
@@ -97,8 +97,8 @@ public struct ConsentDisclosure: Equatable, Sendable {
         """
       destination =
         """
-        It goes only to api.anthropic.com, with the API key you add in Models settings, and only \
-        while the mentor is on. Anthropic handles it under the terms of your API account. \(never)
+        It goes only to Anthropic, with the API key you add in Models settings, and only while \
+        suggestions are on. Anthropic handles it under the terms of your API account. \(never)
         """
     case .openAI:
       title = "Athina reads your screen and asks GPT about it"
@@ -110,8 +110,8 @@ public struct ConsentDisclosure: Equatable, Sendable {
         """
       destination =
         """
-        It goes only to api.openai.com, with the OpenAI API key you add in Models settings, and \
-        only while the mentor is on. OpenAI handles it under the terms of your API account, and \
+        It goes only to OpenAI, with the OpenAI API key you add in Models settings, and only \
+        while suggestions are on. OpenAI handles it under the terms of your API account, and \
         Athina asks it not to store the replies. \(never)
         """
     case .openCode:
@@ -124,10 +124,10 @@ public struct ConsentDisclosure: Equatable, Sendable {
         """
       destination =
         """
-        It goes only to opencode.ai, with the OpenCode API key you add in Models settings, and \
-        only while the mentor is on. OpenCode passes it to Anthropic or OpenAI, whichever \
-        makes the model you choose, and that company keeps it for 30 days under its own data \
-        policy. \(never)
+        It goes only to OpenCode, with the OpenCode API key you add in Models settings, and only \
+        while suggestions are on. OpenCode passes it to Anthropic or OpenAI, whichever makes \
+        the model you choose, and that company keeps it for 30 days under its own data policy. \
+        \(never)
         """
     }
   }

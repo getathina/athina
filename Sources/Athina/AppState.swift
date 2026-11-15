@@ -89,6 +89,7 @@ final class AppState {
         // one never allowed asks first.
         apiKeyHint = nil
         apiKeyError = nil
+        apiKeyErrorDetail = nil
         reloadKeyHint()
         if !settings.hasConsent, !isSample { perform(.openConsent) }
       }
@@ -110,7 +111,7 @@ final class AppState {
   var focus: FocusContext?
   var latestObservation: ActivityObservation?
   var latestImage: NSImage?
-  /// Clear Journal took the latest frame away and no capture has replaced it yet.
+  /// Delete Everything took the latest frame away and no capture has replaced it yet.
   var latestFrameCleared = false
   var cadence = CadenceStatus()
   /// The debug panel's timeline: the journal's newest rows of both kinds, newest
@@ -145,7 +146,10 @@ final class AppState {
   /// Last four characters of the provider in force's saved key, or nil when
   /// there is none.
   private(set) var apiKeyHint: String?
+  /// What went wrong with the saved key, in Athina's words, or nil.
   private(set) var apiKeyError: String?
+  /// The code's own text for `apiKeyError`, kept for its tooltip and the log.
+  private(set) var apiKeyErrorDetail: String?
 
   // MARK: Callouts and voice state
 
@@ -297,9 +301,13 @@ final class AppState {
       ? [] : Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
     needsPermissionsOnboarding = !status.allGranted
     speechAvailability = SpeechListener.availability()
+    // A live launch has not read its key yet (`start` does, off the main
+    // thread), so its walk through has the model page, and keeps it even
+    // once a saved key is found: the walk's pages are fixed at its start.
     setup = SetupFlow.atLaunch(
       requested: LaunchArguments.windowToOpen.flatMap(SetupPage.init(rawValue:)),
-      hasConsent: settings.hasConsent
+      hasConsent: settings.hasConsent,
+      needsKey: !clientMode.isOffline
     )
   }
 
@@ -890,6 +898,7 @@ final class AppState {
     do {
       try keyStore.save(key, for: provider)
       apiKeyError = nil
+      apiKeyErrorDetail = nil
       AppState.log.notice(
         """
         \(provider.rawValue, privacy: .public) api key saved \
@@ -897,7 +906,8 @@ final class AppState {
         """
       )
     } catch {
-      apiKeyError = "Could not save the key: \(error)"
+      apiKeyError = "The key could not be saved on this Mac. Try again."
+      apiKeyErrorDetail = String(describing: error)
       AppState.log.error("api key save failed: \(String(describing: error), privacy: .public)")
       Announce.post(apiKeyError ?? "")
     }
@@ -912,10 +922,13 @@ final class AppState {
     do {
       try keyStore.delete(for: provider)
       apiKeyError = nil
+      apiKeyErrorDetail = nil
       AppState.log.notice("\(provider.rawValue, privacy: .public) api key removed")
       Announce.post("Saved \(provider.name) API key removed")
     } catch {
-      apiKeyError = "Could not remove the key: \(error)"
+      apiKeyError = "The saved key could not be removed. Try again."
+      apiKeyErrorDetail = String(describing: error)
+      AppState.log.error("api key removal failed: \(String(describing: error), privacy: .public)")
       Announce.post(apiKeyError ?? "")
     }
     reloadKeyHint()
@@ -950,7 +963,9 @@ final class AppState {
         self.apiKeyHint = hint
       case .failure(let error):
         self.apiKeyHint = nil
-        self.apiKeyError = "Could not read the key: \(error)"
+        self.apiKeyError = "The saved key could not be read. Paste it again."
+        self.apiKeyErrorDetail = String(describing: error)
+        AppState.log.error("api key read failed: \(String(describing: error), privacy: .public)")
       }
     }
   }
@@ -1499,16 +1514,16 @@ final class AppState {
   var talkBackLine: String {
     guard settings.hasConsent else { return "Talk back: off until you allow watching" }
     if case .unavailable = speechAvailability {
-      return "Talk back: no on-device recognition for this language"
+      return "Talk back: speech is not understood in this language"
     }
     guard let key = settings.mentor.pushToTalkHotKey else { return "Talk back: no shortcut set" }
     if !permissions.voiceGranted { return "Talk back: needs Microphone and Speech Recognition" }
     if isRunning, !pushToTalkRegistered {
-      return "Talk back: \(key.displayString) could not be registered"
+      return "Talk back: another app uses \(key.displayString)"
     }
     switch talkBack {
     case .listening: return "Talk back: listening…"
-    case .waiting: return "Talk back: waiting for the mentor's current call…"
+    case .waiting: return "Talk back: waiting for the mentor to finish…"
     case .thinking: return "Talk back: asking the mentor…"
     case .idle: return "Talk back: hold \(key.displayString)"
     }
@@ -1587,7 +1602,8 @@ final class AppState {
       return
     }
     guard mode.isActive else {
-      toast.showNote("Athina is \(mode.label.lowercased()), so it is not listening.")
+      let reason = mode == .excluded ? "not watching the app in front" : mode.label.lowercased()
+      toast.showNote("Athina is \(reason), so it is not listening.")
       return
     }
     guard let suggestion = suggestionToTalkTo() else { return }
@@ -1788,7 +1804,7 @@ final class AppState {
     case .excluded: return "Not watching \(focus?.appName ?? "excluded app")"
     case .waitingForPermissions: return "Waiting for permissions"
     case .waitingForConsent: return "Not watching until you allow it"
-    case .stopped: return journalError == nil ? "Starting…" : "Stopped: journal unavailable"
+    case .stopped: return journalError == nil ? "Starting…" : "Stopped: cannot save what it sees"
     }
   }
 

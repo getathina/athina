@@ -1077,7 +1077,7 @@ public actor MentorLoop {
     await publishStatus()
   }
 
-  /// Drops every status record that describes a row Clear Journal deleted.
+  /// Drops every status record that describes a row Delete Everything deleted.
   ///
   /// Each is dropped rather than left pointing at a row that is gone: the
   /// triage gate's observation, the last call of each tier, and the mentor

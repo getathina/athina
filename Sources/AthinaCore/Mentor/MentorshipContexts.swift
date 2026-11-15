@@ -114,7 +114,7 @@ public enum ContextExclusion: Equatable, Sendable {
     switch self {
     case .noContextsDeclared: "no context is declared"
     case .noMatch(let reason):
-      reason.isEmpty ? "triage matched no declared context" : reason
+      reason.isEmpty ? "none of your contexts matched" : reason
     }
   }
 }

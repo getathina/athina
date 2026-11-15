@@ -64,7 +64,7 @@ struct VoiceSection: View {
             }
           }
         )
-        LabeledContent("On-device recognition") {
+        LabeledContent("Language") {
           switch state.speechAvailability {
           case .available(let locale):
             StatusLabel("Available for \(locale)", kind: .success)
@@ -94,7 +94,8 @@ struct VoiceSection: View {
           Hold the shortcut and say \"tell me more,\" \"not now,\" or \"never for this\" to \
           answer a suggestion, or ask a question about it and the answer appears in the \
           suggestion. Audio and transcripts stay on this Mac. Only your question, the \
-          suggestion, and the text of the screen it was made from go to the mentor model.
+          suggestion, and the text of the screen it was made from are sent, to \
+          \(state.settings.mentor.provider.name).
           """
         )
       }

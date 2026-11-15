@@ -155,7 +155,7 @@ particular to this app:
 - **Errors are said in Athina's words.** A failed call or a held question
   says what it means and what to do (`UserFacing`), with the code's own text
   kept as the tooltip, in the call log and in the journal.
-- **What cannot be undone asks first.** Clear Journal…, Reset
+- **What cannot be undone asks first.** Delete Everything…, Reset
   Understanding… and the saved key's Remove… open a confirmation that names
   what is lost; the confirming button is plain, since it is what the person
   chose, and Cancel is always there. A common removal that can be put back,
@@ -169,7 +169,13 @@ particular to this app:
   (`SetupFlow`), and closing the window at any page is fine. The window is
   titled by its page, as Settings is by its pane, and the menu's Allow
   Watching… and Permissions… open one page of it on its own, which closes once
-  it is done with.
+  it is done with. Every page lies on the grouped form's own grid, the one the
+  model page's form and every Settings pane draw (`SetupGrid`): a card 20 pt
+  from the window's edge, every title, row, paragraph and footnote 10 pt inside
+  it, each row's icon centred in one 24 pt column on the row's first line, and
+  the hero icon's visible body flush with the cards' edges. A walk through's
+  pages are fixed when it begins, so its dots count the same pages from the
+  first page to the last.
 - **Consent comes first and asks plainly.** The consent page is the first
   thing a launch shows until there is an Allow, as the HIG (Privacy) asks
   for data collection to be explained before it starts; it says who receives
@@ -183,4 +189,9 @@ particular to this app:
 - **Words.** Buttons, menu items, window titles, and column headings use title
   case; labels, section headers, and status words use sentence case. The
   interface says keyboard shortcut rather than hotkey, names panes and places
-  plainly, and speaks of Athina in the third person, never "we".
+  plainly, and speaks of Athina in the third person, never "we". It says what
+  a setting or control enables for the person and what they will see, never
+  how Athina does it: no hostnames, storage, component or panel names, or
+  framework and API terms. What a person needs in order to decide stays: the
+  macOS permissions to grant by name, which company receives what and when,
+  what stays on the Mac and for how long, and the names of the settings.

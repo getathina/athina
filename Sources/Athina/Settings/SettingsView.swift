@@ -275,32 +275,32 @@ struct CaptureSections: View {
       Section(
         content: {
           IntRow(
-            "Longest frame edge",
+            "Longest screenshot edge",
             value: $state.settings.maxFrameDimension,
             range: 320...4096,
             step: 64,
             unit: .pixels,
             help:
               """
-              Frames are scaled down to this size. Smaller frames are cheaper to compare, \
-              read, and store.
+              Screenshots are scaled down to this size. Smaller ones are cheaper to compare, \
+              read, and keep.
               """
           )
           IntRow(
-            "Treat frames as unchanged within",
+            "Treat screens as unchanged within",
             value: $state.settings.hashDistanceThreshold,
             range: 0...PerceptualHash.bitCount,
             step: 1,
             unit: .bits,
             help:
               """
-              A frame this close to the previous one, out of \(PerceptualHash.bitCount) bits \
-              of its fingerprint, is dropped unless the window or the focused text changed.
+              A screenshot this close to the previous one, on a \(PerceptualHash.bitCount)-bit \
+              likeness, is dropped unless the window or the text you are working in changed.
               """
           )
         },
         header: {
-          Text("Frames")
+          Text("Screenshots")
         }
       )
       Section(
@@ -316,30 +316,30 @@ struct CaptureSections: View {
               Text("Text recognition")
               Text(
                 """
-                Accurate takes a few hundred milliseconds per frame. Fast is much quicker but \
-                finds no text in dark interfaces such as terminals.
+                Accurate takes a few hundred milliseconds per screenshot. Fast is much quicker \
+                but finds no text in dark interfaces such as terminals.
                 """
               )
             }
           )
           .pickerStyle(.segmented)
           PercentRow(
-            "Thumbnail quality",
+            "Screenshot quality",
             value: $state.settings.thumbnailJPEGQuality,
             range: 0.1...1,
             step: 0.05
           )
           NumberRow(
-            "Clean up the journal every",
+            "Remove expired items every",
             value: $state.settings.retentionInterval,
             range: 30...86400,
             step: 30,
             unit: .seconds,
-            help: "How often the journal removes what is past its time or over its size limit."
+            help: "How often what is past its time or over the size limit is removed."
           )
         },
         header: {
-          Text("Recognition and storage")
+          Text("Reading and keeping")
         }
       )
     }
@@ -349,7 +349,7 @@ struct CaptureSections: View {
 // MARK: - Journal
 
 /// How long the journal keeps what Athina sees and how large it may grow, where
-/// it is and what it holds, with Clear Journal, in the Privacy pane.
+/// it is and what it holds, with Delete Everything, in the Privacy pane.
 struct JournalSection: View {
   @Environment(AppState.self)
   private var state
@@ -360,14 +360,14 @@ struct JournalSection: View {
     @Bindable var state = state
     Section(
       content: {
-        DurationRow("Keep thumbnails for", value: $state.settings.thumbnailRetention)
+        DurationRow("Keep screenshots for", value: $state.settings.thumbnailRetention)
         DurationRow(
           "Keep text and events for",
           value: $state.settings.textRetention,
-          help: "Always at least as long as thumbnails."
+          help: "Always at least as long as screenshots."
         )
         NumberRow(
-          "Limit the journal to",
+          "Keep at most",
           value: Binding(
             get: { Double(state.settings.journalSizeCapBytes / (1024 * 1024)) },
             set: {
@@ -380,12 +380,14 @@ struct JournalSection: View {
           unit: .megabytes,
           help:
             """
-            The oldest thumbnails, then the oldest text and events, are removed to stay \
+            The oldest screenshots, then the oldest text and events, are removed to stay \
             under this size.
             """
         )
+        // The folder, which is what a person looks for; the file inside it is
+        // Athina's own business.
         LabeledContent("Location") {
-          Text(Formatting.path(state.journalURL))
+          Text(Formatting.path(state.journalURL.deletingLastPathComponent()))
             .textSelection(.enabled)
             .multilineTextAlignment(.trailing)
             .fixedSize(horizontal: false, vertical: true)
@@ -395,8 +397,8 @@ struct JournalSection: View {
           LabeledContent("Contents") {
             Text(
               """
-              \(Plural.count(stats.observationCount, "observation", "observations")), \
-              \(Plural.count(stats.thumbnailCount, "thumbnail", "thumbnails")), \
+              \(Plural.count(stats.observationCount, "screen read", "screens read")), \
+              \(Plural.count(stats.thumbnailCount, "screenshot", "screenshots")), \
               \(Plural.count(stats.eventCount, "event", "events"))
               """
             )
@@ -409,24 +411,24 @@ struct JournalSection: View {
             NSWorkspace.shared.activateFileViewerSelecting([state.journalURL])
           }
           Spacer()
-          Button("Clear Journal…", role: .destructive) {
+          Button("Delete Everything…", role: .destructive) {
             confirmClear = true
           }
           .accessibilityIdentifier("journal.clear")
         }
       },
       header: {
-        Text("Journal on this Mac")
+        Text("Kept on this Mac")
       }
     )
-    // Clearing is what the person just chose, so the confirming button
+    // Deleting is what the person just chose, so the confirming button
     // is the plain default and Cancel stays available.
     .confirmationDialog(
-      "Clear the journal?",
+      "Delete everything Athina has kept?",
       isPresented: $confirmClear,
       titleVisibility: .visible,
       actions: {
-        Button("Clear Journal") {
+        Button("Delete Everything") {
           Task { await state.clearJournal() }
         }
         Button("Cancel", role: .cancel) {}
@@ -434,9 +436,9 @@ struct JournalSection: View {
       message: {
         Text(
           """
-          Every observation, thumbnail, event, suggestion, follow-up question, and model call \
-          record is deleted, along with Athina's understanding of what you are working toward. \
-          You can't undo this action.
+          Every screenshot, screen text, event, suggestion, question and answer is deleted, \
+          along with Athina's understanding of what you are working toward. Your settings and \
+          saved key stay. You can't undo this action.
           """
         )
       }
@@ -491,8 +493,8 @@ struct PrivacySettings: View {
         footer: {
           Text(
             """
-            Withdrawing stops all capturing and sending at once. What the journal already holds \
-            stays until it expires or you clear it below.
+            Withdrawing stops all capturing and sending at once. What Athina has already kept \
+            stays until it expires or you delete it below.
             """
           )
         }
@@ -580,8 +582,8 @@ struct PrivacySettings: View {
         footer: {
           Text(
             """
-            While one of these apps is frontmost, Athina captures nothing, reads no window or \
-            element, and journals only that the app was excluded. Password fields in any app \
+            While one of these apps is in front, Athina captures nothing, reads no window or \
+            field, and keeps only a note that the app was excluded. Password fields in any app \
             are never read either.
             """
           )

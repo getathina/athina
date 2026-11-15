@@ -23,9 +23,10 @@ front, its window, and the text on your screen, read on your Mac. When it sees
 a faster way to do what you are doing, a risk you may have missed, or a step
 that will not get you where you are going, it tells you in a small note under
 the menu bar and can outline the spot on screen it means. It asks a model
-with your own API key for Anthropic, OpenAI or OpenCode, so you pay for those
-calls under an hourly cap (see [spend control](docs/mentor-loop.md#spend-control)), and nothing
-else leaves your Mac (see [Privacy](#privacy)).
+with your own API key for Anthropic, OpenAI or OpenCode, so you pay for what
+it asks, under an hourly limit you set (see
+[spend control](docs/mentor-loop.md#spend-control)), and nothing else leaves
+your Mac (see [Privacy](#privacy)).
 
 ## How it works
 
@@ -77,39 +78,42 @@ else leaves your Mac (see [Privacy](#privacy)).
    stops for this app)                ┆
 ```
 
-By default Claude Haiku 4.5 triages and Claude Opus 5 mentors, on Anthropic and on OpenCode; on OpenAI they are GPT-6 Luna and GPT-6 Sol.
-Each tier's model and effort can be changed in Settings > Models.
+Two models share the work. A quick, inexpensive one takes a look whenever what you are doing changes, and a stronger one looks closer only when the first finds something worth it.
+By default they are Claude Haiku 4.5 and Claude Opus 5, on Anthropic and on OpenCode, and GPT-6 Luna and GPT-6 Sol on OpenAI; Settings > Models changes either one, and how much it thinks before answering.
 
-What you seem to be after is the **standing understanding**, a short note the model writes and every triage and mentor call carries, so Athina can tell you when an approach will not get you where you are going.
-Each mentor call rewrites it, and after 15 minutes of active use with no mentor call a **refresh** rewrites it on its own, by default on Claude Opus 5 or GPT-6 Sol.
-It expires after 4 hours without activity and at the start of a new day.
+Athina also keeps an **understanding** of what you appear to be working toward, a short note it rewrites as you work, so it can tell you when an approach will not get you where you are going.
+It is forgotten after 4 hours without activity and at the start of a new day, and Settings > Models shows it and resets it whenever you like.
 
-Every call counts against one **hourly cap**, $1 by default: the gaps between calls stretch as the hour's spend nears it, and at the cap no call is made until the next hour.
+Everything Athina asks counts against one **hourly limit**, $1 by default: it asks less often as the hour's spend nears the limit, and stops at it until the next hour.
 Change it in [Settings > Models > Spend at most](docs/mentor-loop.md#spend-control).
 
-[Privacy](#privacy) says what each call carries and what stays on your Mac, and the [mentor loop](docs/mentor-loop.md) has every gate, tier and setting.
+[Privacy](#privacy) says what is sent and what stays on your Mac.
 
 ## Privacy
 
-- Nothing is captured or sent until you choose Allow on the Setup window's
-  consent page that opens first, and Settings > Privacy withdraws it at once.
-- The journal, settings and audio stay on this Mac; the only network peer is
-  the host of the provider chosen in Settings > Models (`api.anthropic.com`,
-  `api.openai.com` or `opencode.ai`), and only the mentor loop reaches it.
-- A model call carries text read from the screen (the app, the window title,
-  the focused element, the recognized text), a summary of recent events and
-  the note the model keeps of what you appear to be working toward. The mentor tier
-  also gets, by default, the latest screenshot thumbnail; a question you talk
-  back is sent as a follow-up; and while mentorship contexts are enforced,
-  their names and descriptions go too. File names, keystrokes and the key are
+- Nothing is captured or sent until you choose Allow in the Setup window,
+  which opens first, and Settings > Privacy withdraws that at once.
+- Everything Athina keeps, which is what it has seen and your settings, stays
+  on this Mac, and so does the sound of your voice. Athina sends only to the
+  company you choose in Settings > Models, Anthropic, OpenAI or OpenCode, and
+  to no one else.
+- What it sends is the text on your screen, read on your Mac, with the names
+  of the app and window in front and the text of the field you are working
+  in; a summary of your recent activity and your answers to its suggestions;
+  and its understanding of what you appear to be working toward. A closer look
+  also takes the latest screenshot, unless you turn that off in
+  Settings > Models; a question you ask about a suggestion is sent as words,
+  never as audio; and while Athina mentors only inside your mentorship
+  contexts, their names and descriptions go too. File names and keystrokes are
   never sent.
-- Excluded apps (Keychain Access, Passwords and common password managers by
-  default) and secure text fields are never read.
-- Pause stops all sensing. Thumbnails expire after 6 hours and text after 7
-  days by default, and the journal can be cleared at any time.
+- Apps you exclude (Keychain Access, Passwords and common password managers
+  to begin with) and password fields are never read.
+- Pause stops Athina watching. What it keeps expires, screenshots after 6
+  hours and text after 7 days by default, and Settings > Privacy deletes it
+  all at any time.
 
-The [privacy model](docs/privacy.md) says exactly what each tier receives and
-what is kept.
+The [privacy model](docs/privacy.md) has the full account of what is sent, to
+whom, and what is kept.
 
 ## Requirements
 
@@ -126,75 +130,70 @@ what is kept.
 4. In System Settings > Privacy & Security, choose **Open Anyway** next to
    Athina, and confirm.
 
-Each update asks again, and asks once to read the saved key (see
-[Unsigned releases](docs/releasing.md#unsigned-releases)). There are no
-automatic updates yet: a new version is downloaded and dragged over the old
-one. A released copy uses the same journal, settings and keychain item as a
-development build (see
+Each update asks again, and macOS asks once whether the new copy may use your
+saved key (see [Unsigned releases](docs/releasing.md#unsigned-releases)).
+There are no automatic updates yet: download a new version and drag it over
+the old one. Your settings, your saved key and what Athina has kept carry
+over, and a copy built from source shares them too (see
 [A released copy and your data, grants, and key](docs/releasing.md#a-released-copy-and-your-data-grants-and-key)).
 To build Athina from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Try it without a key.** From a source checkout, `make run` starts a replay:
-Athina watches your real screen but answers from model calls recorded in the
-repository, so it needs no API key and spends nothing. It takes Xcode 26 or
-later, your Allow on the Setup window's first page and the two permissions
-below;
+**Try it without a key.** From a source checkout, `make run` shows Athina at
+work with no API key and nothing to pay: it watches your real screen, and its
+suggestions come from model answers recorded earlier. It takes Xcode 26 or
+later, your Allow in the Setup window and the two permissions below;
 [CONTRIBUTING.md](CONTRIBUTING.md) has the setup.
 
 ## Setup: an API key
 
-The mentor loop needs an API key for the provider chosen at the top of
-Settings > Models: Anthropic, the default; OpenAI, for the GPT models Codex
-uses; or OpenCode, through its Zen gateway, for its Claude and GPT models
-([Providers](docs/mentor-loop.md#providers)). Choosing a provider other than
-Anthropic asks for your Allow again, since what is sent goes to another company.
-Open Settings > Models (the menu's Add API Key item goes there), paste the key,
-press Save, then Test Connection: it sends one tiny request on the triage model
-and reports the answering model or the API's own error message. Each provider's
-key goes into your login keychain (`com.ahcarpenter.athina` /
-`anthropic-api-key`, `openai-api-key` or `opencode-api-key`) and nowhere else;
-the app only ever shows its last four characters, and never reads or changes
-another tool's setup, such as Claude Code's, Codex's or OpenCode's. Without a
-key for the chosen provider the loop stays idle and the menu says so. Remove
-asks first, then deletes the keychain item. A replay needs no key, and the app never reads the
-keychain while replaying.
+Athina needs an API key for the provider you choose at the top of
+Settings > Models: Anthropic, the default; OpenAI; or OpenCode, which serves
+both companies' models ([Providers](docs/mentor-loop.md#providers)). Choosing
+a provider you have not allowed yet asks for your Allow first, since what is
+sent then goes to another company. Open Settings > Models (the menu's Add API
+Key item goes there), paste the key, press Save, then Test Connection: it asks
+one tiny question and tells you which model answered, or what went wrong. Each
+provider's key is kept safely on this Mac and sent only to that provider;
+Athina shows only its last four characters, and never reads or changes another
+tool's setup, such as Claude Code's, Codex's or OpenCode's. Without a key for
+the chosen provider Athina sends nothing, and its menu says so. Remove asks
+first, then deletes the saved key.
 
 ## Permissions
 
 A first launch opens the Setup window, which asks before anything else whether
 Athina may watch the screen and send what it reads to the chosen provider,
-Anthropic by default; nothing is sensed or sent until you choose
+Anthropic by default; nothing is captured or sent until you choose
 Allow ([Consent](docs/privacy.md#consent)). It then walks on through the two
-permissions Athina needs, asking for neither until you press its button on the
-permissions page, the model and its key, and what to expect; the other two
-permissions are optional and serve only talking back
-([how it asks](docs/privacy.md#permissions)).
+permissions Athina needs, asking for neither until you press its button, the
+model and its key, and what to expect; the other two permissions are optional
+and serve only talking back ([how it asks](docs/privacy.md#permissions)).
 
-| Permission | Used for | Without it |
+| Permission | Lets Athina | Without it |
 | --- | --- | --- |
-| Screen Recording | ScreenCaptureKit capture of the display containing the focused window, then Vision OCR | Accessibility-only mode: app, window, and focused element are still sensed; no frames |
-| Accessibility | Focused app, window title, focused element role and text, via the AX API; the live window frame a callout is checked against | Screen-only mode: frames and OCR only; app identity comes from NSWorkspace; no callouts, since the window cannot be verified |
-| Microphone (optional) | Hearing you while the talk-back key is held | Talking back is off; a key press says so |
-| Speech Recognition (optional) | Turning that audio into text on this Mac with the system recognizer, on-device only | Talking back is off; a key press says so |
+| Screen Recording | Take a screenshot of the display you are working on when what you are doing changes, and read its text on this Mac | Athina still reads the app and window in front and the field you are working in, but no screen text and no screenshots |
+| Accessibility | Read the title of the window in front and the text of the field you are working in, and outline the spot a suggestion is about | Athina still reads the screen's text and knows which app is in front, but outlines nothing on screen |
+| Microphone (optional) | Hear you while you hold the talk-back shortcut | Talking back is off, and pressing the shortcut says so |
+| Speech Recognition (optional) | Turn what you say into text on this Mac; the audio never leaves it | Talking back is off, and pressing the shortcut says so |
 
 ## Develop
 
-Athina builds with SwiftPM. Plain `make` lists every command, `make run`
-starts a replay that needs no key and spends nothing, and `make check` is what
-a change passes before it is pushed.
+Athina is built with the Swift Package Manager. Plain `make` lists every
+command, `make run` shows Athina at work with no key and nothing to pay, and
+`make check` is what a change passes before it is pushed.
 [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, the daily loop, the rules and
 how a change reaches `main`; `docs/` holds the reference:
 
 | Doc | Covers |
 | --- | --- |
-| [architecture.md](docs/architecture.md) | the source layout, the sensing loop, the journal, the subscription point |
-| [mentor-loop.md](docs/mentor-loop.md) | triage and mentor calls, callouts, keyboard shortcuts, talking back, mentorship contexts, the standing understanding, spend control |
+| [architecture.md](docs/architecture.md) | how the code is laid out and how its parts fit together |
+| [mentor-loop.md](docs/mentor-loop.md) | when Athina asks a model and what it shows: suggestions, outlines on screen, keyboard shortcuts, talking back, mentorship contexts, the understanding, spend control |
 | [privacy.md](docs/privacy.md) | what leaves the Mac, what is kept, and for how long |
-| [debug-panel.md](docs/debug-panel.md) | the debug panel |
+| [debug-panel.md](docs/debug-panel.md) | the window for troubleshooting Athina |
 | [design.md](docs/design.md) | the design conventions, the app icon and the menu bar mark |
-| [code-style.md](docs/code-style.md) | the Swift style, the pinned swift-format, rebasing across the reformat |
-| [testing.md](docs/testing.md) | each test layer's job, where it runs, and what the tests and snapshots cover |
-| [replay.md](docs/replay.md) | replay, the faster clock, replays side by side, recording, the committed fixtures |
-| [e2e.md](docs/e2e.md) | the end-to-end harness, its scenarios and tiers, the control API, hermetic runs |
-| [ci.md](docs/ci.md) | the CI checks, the ready-for-review snapshot gate, checkpoints |
-| [releasing.md](docs/releasing.md) | releases, unsigned releases, code signing |
+| [code-style.md](docs/code-style.md) | the Swift style and how it is checked |
+| [testing.md](docs/testing.md) | what each kind of test covers and where it runs |
+| [replay.md](docs/replay.md) | running Athina on recorded model answers, with no key and nothing to pay |
+| [e2e.md](docs/e2e.md) | the end-to-end checks that drive the real app |
+| [ci.md](docs/ci.md) | the checks every change passes before it merges |
+| [releasing.md](docs/releasing.md) | how a release is made, and why macOS asks before opening one |

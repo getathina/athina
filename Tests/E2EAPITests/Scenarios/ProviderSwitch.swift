@@ -59,11 +59,12 @@
           throw AppProcess.Failure("the consent page never opened for OpenAI")
         }
         let consent = try await control.find(.everything(in: consentWindow)).flatMap(\.texts)
+        // The company that receives what is sent, never the host it goes to.
         run.check(
-          "the consent page names OpenAI and its host",
+          "the consent page names OpenAI as the recipient and no host",
           true,
-          consent.contains { $0.contains("OpenAI") }
-            && consent.contains { $0.contains("api.openai.com") }
+          consent.contains { $0.contains("It goes only to OpenAI") }
+            && !consent.contains { $0.contains("api.openai.com") }
         )
         try await run.picture(consentWindow, "consent-openai")
         let menu = try await control.menu().map(\.title)

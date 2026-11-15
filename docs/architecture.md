@@ -91,7 +91,7 @@ then text and events older than `textRetention`, which settings clamp to at
 least `thumbnailRetention` so text and events never expire before their
 thumbnails, and then, if the file is still over `journalSizeCapBytes`, the
 oldest thumbnails and finally the oldest observations and events until it fits.
-"Clear Journal" in settings deletes everything.
+Delete Everything in Settings > Privacy deletes everything.
 
 The mentor loop adds five tables: `suggestions` (every suggestion shown, with
 the user's feedback, the inferred goal it was judged against, the region it
@@ -105,7 +105,7 @@ question talked back: the transcript, the answer or why there is none, and the
 model). A moment held at the context boundary is recorded in `model_calls` as
 the `outOfContext` outcome. All five expire with `textRetention`, the
 understanding goes with the oldest observations and events in a size-cap sweep,
-and all five are emptied by Clear Journal. A journal written by an earlier build
+and all five are emptied by Delete Everything. A journal written by an earlier build
 is migrated in place when it is opened: missing tables are created and columns
 added or dropped, so nothing has to be thrown away.
 

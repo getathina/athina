@@ -3,7 +3,7 @@ import Testing
 @testable import AthinaCore
 
 @Suite struct EmptyFrameTests {
-  /// Right after Clear Journal, with Screen Recording granted and the person
+  /// Right after Delete Everything, with Screen Recording granted and the person
   /// active, the pane says the journal was cleared and the next capture is
   /// coming, not that a permission is missing.
   @Test func aClearedJournalWhileWatchingSaysTheNextCaptureIsComing() {

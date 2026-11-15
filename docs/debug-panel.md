@@ -53,7 +53,7 @@ counters, journal size and path. Centre: the latest kept frame with OCR boxes
 overlaid and the recognized text below, or, with no frame to show, why there is
 none, such as a journal just cleared, Screen Recording missing, or an excluded
 app in front (`EmptyFrame`); selecting an observation in the timeline shows
-that frame instead. After Clear Journal the panel names none of what it
+that frame instead. After Delete Everything the panel names none of what it
 deleted: no gate decision or model call about a deleted row, no transcript, and
 no callout record unless that callout is still on screen (`debug-panel-cleared`).
 Right: a live timeline of observations and
