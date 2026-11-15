@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/getathina/athina/compare/v0.2.0...v0.2.1) (2026-11-15)
+
+
+### Bug fixes
+
+* keep a just-shown note out of screen captures and add a make demo recording ([#135](https://github.com/getathina/athina/issues/135)) ([05cc7a7](https://github.com/getathina/athina/commit/05cc7a7f7278454364283df724476dced2313e7a))
+* lay the Setup window on one grid and say what each setting enables, not how Athina does it ([#143](https://github.com/getathina/athina/issues/143)) ([4d2cbb3](https://github.com/getathina/athina/commit/4d2cbb3e2c4188ceb256f314fb6e8c27098c5066))
+
 ## [0.2.0](https://github.com/getathina/athina/compare/v0.1.0...v0.2.0) (2026-09-29)
 
 
