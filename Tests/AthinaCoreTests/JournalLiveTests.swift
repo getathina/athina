@@ -153,7 +153,7 @@ import Testing
   }
 
   /// The timeline's list holds both kinds of row, once each and in the
-  /// journal's order, and after Clear Journal holds only the cleared event,
+  /// journal's order, and after Delete Everything holds only the cleared event,
   /// though the journal gives new rows the ids of the ones it deleted.
   @Test func theTimelineListsEachRowOnceAndEmptiesWithTheJournal() async throws {
     let url = temporaryURL()

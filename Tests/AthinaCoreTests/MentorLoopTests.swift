@@ -1744,7 +1744,7 @@ struct MentorLoopTests {
 
   /// Clearing the journal leaves no status record of a deleted row.
   ///
-  /// Clear Journal deletes every observation and model call, so the status no
+  /// Delete Everything deletes every observation and model call, so the status no
   /// longer describes any of them: not the triage gate's observation, the last
   /// call of each tier, or the mentor gate's hold on a deleted verdict. What
   /// holds now stays.
