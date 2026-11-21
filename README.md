@@ -12,9 +12,9 @@
 
 <h3 align="center"><strong>A live mentor for your Mac.</strong> It watches how you work and shows you a better way when there is one.</h3>
 
-**Status:** early. Athina runs on macOS 26 or later, and feedback is wanted:
-[issues](https://github.com/getathina/athina/issues) are welcome. It is
-open source under the [Apache License 2.0](LICENSE).
+Athina is early software. It runs on macOS 26 or later, and feedback in
+[issues](https://github.com/getathina/athina/issues) is welcome. It is open
+source under the [Apache License 2.0](LICENSE).
 
 ## Overview
 
@@ -22,9 +22,9 @@ Athina sits in your menu bar and notices what you are working on: the app in
 front, its window, and the text on your screen, read on your Mac. When it sees
 a faster way to do what you are doing, a risk you may have missed, or a step
 that will not get you where you are going, it tells you in a small note under
-the menu bar and can outline the spot on screen it means. It asks a model
-with your own API key for Anthropic, OpenAI or OpenCode, so you pay for what
-it asks, under an hourly limit you set (see
+the menu bar and can outline the spot on screen it means. To decide, it asks
+a model from Anthropic, OpenAI or OpenCode on your own API key. You pay for
+what it asks, up to an hourly limit you set (see
 [spend control](docs/mentor-loop.md#spend-control)), and nothing else leaves
 your Mac (see [Privacy](#privacy)).
 
@@ -78,39 +78,36 @@ your Mac (see [Privacy](#privacy)).
    stops for this app)                ┆
 ```
 
-Two models share the work. A quick, inexpensive one takes a look whenever what you are doing changes, and a stronger one looks closer only when the first finds something worth it.
-By default they are Claude Haiku 4.5 and Claude Opus 5, on Anthropic and on OpenCode, and GPT-6 Luna and GPT-6 Sol on OpenAI; Settings > Models changes either one, and how much it thinks before answering.
+Athina uses two models. A quick, inexpensive one takes a look whenever what you are doing changes, and a stronger one looks closer only when the first finds something worth it.
+By default they are Claude Haiku 4.5 and Claude Opus 5 on Anthropic and on OpenCode, and GPT-6 Luna and GPT-6 Sol on OpenAI. In Settings > Models you can change either one, and how much it thinks before answering.
 
-Athina also keeps an **understanding** of what you appear to be working toward, a short note it rewrites as you work, so it can tell you when an approach will not get you where you are going.
-It is forgotten after 4 hours without activity and at the start of a new day, and Settings > Models shows it and resets it whenever you like.
+Athina also keeps an understanding of what you appear to be working toward: a short note it rewrites as you work, so it can tell you when an approach will not get you where you are going.
+It forgets the note after 4 hours without activity and at the start of a new day. Settings > Models shows it, and you can reset it there at any time.
 
-Everything Athina asks counts against one **hourly limit**, $1 by default: it asks less often as the hour's spend nears the limit, and stops at it until the next hour.
+Everything Athina asks counts against one hourly limit, $1 by default. It asks less often as the hour's spend nears the limit, and stops at the limit until the next hour.
 Change it in [Settings > Models > Spend at most](docs/mentor-loop.md#spend-control).
-
-[Privacy](#privacy) says what is sent and what stays on your Mac.
 
 ## Privacy
 
 - Nothing is captured or sent until you choose Allow in the Setup window,
   which opens first, and Settings > Privacy withdraws that at once.
-- Everything Athina keeps, which is what it has seen and your settings, stays
-  on this Mac, and so does the sound of your voice. Athina sends only to the
-  company you choose in Settings > Models, Anthropic, OpenAI or OpenCode, and
-  to no one else.
-- What it sends is the text on your screen, read on your Mac, with the names
-  of the app and window in front and the text of the field you are working
-  in; a summary of your recent activity and your answers to its suggestions;
-  and its understanding of what you appear to be working toward. A closer look
-  also takes the latest screenshot, unless you turn that off in
-  Settings > Models; a question you ask about a suggestion is sent as words,
-  never as audio; and while Athina mentors only inside your mentorship
-  contexts, their names and descriptions go too. File names and keystrokes are
-  never sent.
+- Everything Athina keeps (what it has seen and your settings) stays on this
+  Mac, and so does the sound of your voice. Athina sends data only to the
+  company you choose in Settings > Models: Anthropic, OpenAI or OpenCode.
+- It sends the text on your screen, read on your Mac, with the names of the
+  app and window in front and the text of the field you are working in. It
+  also sends a summary of your recent activity, your answers to its
+  suggestions, and its understanding of what you appear to be working toward.
+  A closer look adds the latest screenshot, unless you turn that off in
+  Settings > Models. A question you ask about a suggestion goes as words,
+  never as audio. While Athina mentors only inside your mentorship contexts,
+  their names and descriptions go too. File names and keystrokes are never
+  sent.
 - Apps you exclude (Keychain Access, Passwords and common password managers
   to begin with) and password fields are never read.
-- Pause stops Athina watching. What it keeps expires, screenshots after 6
-  hours and text after 7 days by default, and Settings > Privacy deletes it
-  all at any time.
+- Pause stops Athina watching. What it keeps expires by default after 6 hours
+  for screenshots and 7 days for text, and Settings > Privacy deletes all of
+  it at any time.
 
 The [privacy model](docs/privacy.md) has the full account of what is sent, to
 whom, and what is kept.
@@ -130,19 +127,19 @@ whom, and what is kept.
 4. In System Settings > Privacy & Security, choose **Open Anyway** next to
    Athina, and confirm.
 
-Each update asks again, and macOS asks once whether the new copy may use your
-saved key (see [Unsigned releases](docs/releasing.md#unsigned-releases)).
-There are no automatic updates yet: download a new version and drag it over
-the old one. Your settings, your saved key and what Athina has kept carry
-over, and a copy built from source shares them too (see
+macOS refuses each update the same way, and asks once whether the new copy
+may use your saved key (see [Unsigned releases](docs/releasing.md#unsigned-releases)).
+There are no automatic updates yet, so to update, download the new version
+and drag it over the old one. Your settings, your saved key and what Athina
+has kept carry over, and a copy built from source shares them too (see
 [A released copy and your data, grants, and key](docs/releasing.md#a-released-copy-and-your-data-grants-and-key)).
 To build Athina from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Try it without a key.** From a source checkout, `make run` shows Athina at
-work with no API key and nothing to pay: it watches your real screen, and its
-suggestions come from model answers recorded earlier. It takes Xcode 26 or
-later, your Allow in the Setup window and the two permissions below;
-[CONTRIBUTING.md](CONTRIBUTING.md) has the setup.
+You can try Athina without a key. From a source checkout, `make run` shows
+Athina at work with no API key and nothing to pay: it watches your real
+screen, and its suggestions come from model answers recorded earlier. It
+needs Xcode 26 or later, your Allow in the Setup window and the two
+permissions below; [CONTRIBUTING.md](CONTRIBUTING.md) has the setup.
 
 ## Setup: an API key
 
@@ -164,10 +161,10 @@ first, then deletes the saved key.
 A first launch opens the Setup window, which asks before anything else whether
 Athina may watch the screen and send what it reads to the chosen provider,
 Anthropic by default; nothing is captured or sent until you choose
-Allow ([Consent](docs/privacy.md#consent)). It then walks on through the two
-permissions Athina needs, asking for neither until you press its button, the
-model and its key, and what to expect; the other two permissions are optional
-and serve only talking back ([how it asks](docs/privacy.md#permissions)).
+Allow ([Consent](docs/privacy.md#consent)). It then goes through the two
+permissions Athina needs (it asks for each only when you press its button),
+the model and its key, and what to expect. The other two permissions are
+optional and only for talking back ([how it asks](docs/privacy.md#permissions)).
 
 | Permission | Lets Athina | Without it |
 | --- | --- | --- |
