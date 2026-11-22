@@ -262,7 +262,9 @@ final class AppState {
       clientMode: clientMode,
       compiledIn: ControlAvailability.compiledIn
     )
-    (clock, clockControl) = clockMode.makeClock()
+    let (launchClock, launchClockControl) = clockMode.makeClock()
+    (clock, clockControl) = (launchClock, launchClockControl)
+    FeatureDependencies.prepare(clock: launchClock)
     // A hermetic run listens to no click outside its own windows and to
     // no microphone; the control API stands in for both.
     toast = ToastController(clock: clock, watchesOtherApps: !controlMode.isHermetic)

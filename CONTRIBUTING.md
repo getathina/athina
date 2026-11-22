@@ -17,16 +17,19 @@ coding agents, with pointers into these docs.
   the end-to-end harness's real-screen tier, Screen Recording and
   Accessibility granted to the terminal that runs it (see [Permissions](README.md#permissions)).
   `make doctor` names whatever is missing
-- The app has two third-party dependencies, which SwiftPM fetches, pinned:
-  KeyboardShortcuts, for its global keyboard shortcuts and their recorder
-  (see [Keyboard shortcuts](docs/mentor-loop.md#keyboard-shortcuts)), and
-  GRDB, through which the journal reaches the system SQLite (see
-  [Journal](docs/architecture.md#journal)); the rest is the system's:
+- The app has three third-party dependencies, which SwiftPM fetches at the
+  versions the committed `Package.resolved` names: KeyboardShortcuts, for its
+  global keyboard shortcuts and their recorder
+  (see [Keyboard shortcuts](docs/mentor-loop.md#keyboard-shortcuts)), GRDB,
+  through which the journal reaches the system SQLite (see
+  [Journal](docs/architecture.md#journal)), and The Composable Architecture,
+  with the packages it brings, which the app's features are built on
+  (`Sources/AthinaFeatures`); the rest is the system's:
   SwiftUI, ScreenCaptureKit, Vision, the accessibility API, and AVFoundation
   and Speech for talking back
 - The UI smoke test alone (see [UI snapshot smoke test](docs/ci.md#ui-snapshot-smoke-test)) uses
-  swift-snapshot-testing, which SwiftPM fetches, pinned, only when that test
-  runs; the app never links it
+  swift-snapshot-testing, which SwiftPM fetches, pinned, with any build of the
+  package but builds only when that test runs; the app never links it
 - The developer tools `athina-drive` and `snapshot-diff` alone take their
   command lines with swift-argument-parser, which SwiftPM fetches, pinned,
   with any build of the package; the app never links it
@@ -81,10 +84,12 @@ launching a second copy from Finder, which was equally true before.
 
 `Package.swift` defines the targets and `scripts/bundle.sh` wraps the release
 binary in an app bundle with `Resources/Info.plist` and
-`Resources/Athina.entitlements`, then signs it. `swift build` and `swift test`
-work directly too. The bundle `make build` makes is a development one: it carries
-the end-to-end harness's control API (the `ControlAPI` package trait, see [The
-control API](docs/e2e.md#the-control-api)), which a release never does.
+`Resources/Athina.entitlements`, then signs it. `swift build` works directly
+too; run the tests with `make test`, since a bare `swift test` can hang on CI's
+toolchain (see [Stores in tests](docs/testing.md#stores-in-tests)). The bundle
+`make build` makes is a development one: it carries the end-to-end harness's
+control API (the `ControlAPI` package trait, see [The control
+API](docs/e2e.md#the-control-api)), which a release never does.
 
 `Athina --snapshot <dir>` (`Sources/Athina/Snapshots.swift`) renders every
 window with sample data to PNG files (light and dark) without starting the

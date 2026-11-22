@@ -174,9 +174,30 @@ release is offered only once it is three days old (`minimumReleaseAge`), time
 for a broken or compromised release to be pulled first; one whose registry
 gives no release date waits too, and security updates come at once. The
 runner images are left out, since moving CI to a new macOS image is a
-deliberate commit (see One Xcode, pinned, below). The root `Package.resolved` stays uncommitted (see
-[UI snapshot smoke test](#ui-snapshot-smoke-test)), which Renovate does not
-need. Nothing runs until two steps in the repository's settings, which take an
+deliberate commit (see One Xcode, pinned, below). The root `Package.resolved`
+is committed, resolved with every package trait on, so every build on a
+toolchain uses the same versions, those The Composable Architecture brings by
+range included, and a build with any set of traits leaves the file as it is
+(see [UI snapshot smoke test](#ui-snapshot-smoke-test)). The graph is not the
+same on every toolchain: below Swift 6.4, as on CI's pinned Xcode, Point-Free's
+packages depend on `xctest-dynamic-overlay`, and from 6.4 on
+`swift-issue-reporting`, so the file pins both, and each build fetches both and
+builds the one its toolchain uses. SwiftPM stamps the file
+with the hash of the `Package.swift` it resolved and resolves again whenever
+the two differ, so a stale file would have every build rewrite it: before it
+builds, `test` runs `scripts/check-package-resolved.sh`, which fails unless the
+file carries this manifest's hash and pins every package the manifest names
+and both of those two, and after the tests it fails if the build changed the file anyway.
+`scripts/check-package-resolved.sh --fix` writes the file again, keeping every
+pinned version that still satisfies the manifests and carrying over the pin the
+toolchain it runs on does not use. Should an update need that one newer, only
+that toolchain shows it, by changing the file: CI's, below 6.4, in the step
+after the tests, which fails and prints the pin to commit, and one from 6.4
+only in the checkout it builds. Renovate moves the pin it updates in the file
+but resolves nothing, so its Swift pull request, whose description says so, fails `test`
+until `--fix` is run on its branch and the file committed; a package
+`Package.swift` does not name moves only when someone runs `swift package
+update` on purpose and then `--fix`. Nothing runs until two steps in the repository's settings, which take an
 admin: install the Mend Renovate GitHub App on the repository, and turn on the
 dependency graph and Dependabot alerts, which Renovate's security updates read;
 no Dependabot configuration is used.
@@ -207,9 +228,10 @@ and different content a different one. SwiftPM still decides what is up to
 date, from each source's time and size, so a restored cache only saves work
 and never hides a change; a miss is a full build. The key names the job (which
 fixes the configurations and traits it builds), the Xcode and Swift versions,
-`Package.swift`, and the sources: a run of sources already cached restores
-that cache and saves none, and otherwise the newest cache of the same job,
-toolchain and manifest is restored, a pull request's own before main's, and a
+`Package.swift` and `Package.resolved`, and the sources: a run of sources
+already cached restores that cache and saves none, and otherwise the newest
+cache of the same job, toolchain, manifest and resolved versions is restored,
+a pull request's own before main's, and a
 successful run saves its own. GitHub evicts the least recently used caches
 beyond the repository's 10 GB.
 
@@ -546,9 +568,9 @@ trait, which only `make snapshots-smoke` and `make snapshots`
 turn on. Without it the target
 has no tests and no dependencies, so a plain `swift test` (what `make test`
 runs), `test`, the app, `make release` and the Xcode project never
-fetch, build or run it. It is pinned to one release in `Package.swift`, and
-the package's `Package.resolved` is not committed, since a committed one would
-have every build fetch every package it names.
+build or run it. It is pinned to one release in `Package.swift`, and the
+committed `Package.resolved` names it, so every build fetches it: left out, a
+build with the trait on would add it and change the committed file.
 
 **Approving an intended change.** Push the change and let
 `snapshots-smoke` fail on the drift, look at the report, then run `make

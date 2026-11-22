@@ -82,6 +82,13 @@ jobs:
       - uses: ./.github/actions/swiftpm-cache
         with:
           name: test
+      - name: Package.resolved matches Package.swift
+        # Every build uses the versions the committed Package.resolved names,
+        # and one made from another Package.swift, or without the smoke test's
+        # package or either toolchain's issue-reporting package, would have
+        # builds rewrite it (docs/ci.md "Dependency updates"). Read from the
+        # two files, in a second.
+        run: scripts/check-package-resolved.sh
       - name: Test
         # make test, as people and local validation run it: swift test, then
         # the check that a build without the ControlAPI trait carries no
@@ -93,6 +100,10 @@ jobs:
         # six-hour limit.
         timeout-minutes: 20
         run: make test
+      - name: The build left Package.resolved as committed
+        # What the check above stands in for, on this job's own SwiftPM,
+        # which resolved the package for the tests' build.
+        run: git diff --exit-code -- Package.resolved
 
   lint:
     # Google's Swift style (docs/code-style.md): swift-format from the Xcode

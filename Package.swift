@@ -28,8 +28,9 @@ let package = Package(
     ),
     // Builds the UI smoke test, the one target that uses
     // swift-snapshot-testing (docs/ci.md "UI snapshot smoke test"). It is off by
-    // default, so the app, `make test` and every other build neither fetch
-    // nor build it; `make snapshots-smoke` and `make snapshots` turn it on.
+    // default, so the app, `make test` and every other build fetch it, since
+    // the committed Package.resolved names it, but never build it;
+    // `make snapshots-smoke` and `make snapshots` turn it on.
     .trait(name: "UISnapshotsSmoke"),
     // Builds the API tier of the end-to-end harness, the one test target that
     // launches the app (docs/e2e.md). It is off by default, so
@@ -39,9 +40,10 @@ let package = Package(
     .trait(name: "E2EAPI"),
   ],
   dependencies: [
-    // Each pinned exactly, and no Package.resolved is committed, since a
-    // committed one has every build fetch every package it names. None
-    // depends on another package.
+    // Each pinned exactly. The Composable Architecture depends on packages
+    // of its own, each by a range, and by a manifest of its own either side of
+    // Swift 6.4, so the committed Package.resolved holds both graphs, with
+    // every trait on, to fixed versions (docs/ci.md "Dependency updates").
     //
     // The journal's SQLite access and its live queries (Journal.swift).
     .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1"),
@@ -51,9 +53,17 @@ let package = Package(
     // The global keyboard shortcuts and their recorder, in the app itself
     // (docs/mentor-loop.md "Keyboard shortcuts").
     .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "3.1.0"),
-    // Only for the UI smoke test, and fetched only with its trait on; the one
+    // Only for the UI smoke test, and built only with its trait on; the one
     // product used is SnapshotTesting.
     .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
+    // The app's features are reducers on it (AthinaFeatures), with its 2.0
+    // deprecations turned on, so nothing is written against an API 2.0
+    // removes.
+    .package(
+      url: "https://github.com/pointfreeco/swift-composable-architecture",
+      exact: "1.26.2",
+      traits: ["ComposableArchitecture2Deprecations"]
+    ),
   ],
   targets: [
     .target(
@@ -74,10 +84,14 @@ let package = Package(
     .executableTarget(
       name: "Athina",
       // SnapshotDiff so `--snapshot` judges two captures the same picture
-      // by the rule the baseline comparison uses.
+      // by the rule the baseline comparison uses; AthinaFeatures and The
+      // Composable Architecture for the features and the live values of
+      // their dependencies only the app can give.
       dependencies: [
         "AthinaCore",
+        "AthinaFeatures",
         "SnapshotDiff",
+        .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
         .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
         .target(name: "AthinaControl", condition: .when(traits: ["ControlAPI"])),
       ],
@@ -86,6 +100,18 @@ let package = Package(
         .linkedFramework("AVFoundation"),
         .linkedFramework("Speech"),
       ]
+    ),
+    // The app's features, as reducers over AthinaCore, and the dependencies
+    // they reach the Mac and the loops through: a library rather than part
+    // of the app, so AthinaFeaturesTests can reach them. Every warning is an
+    // error, a deprecation of The Composable Architecture's included.
+    .target(
+      name: "AthinaFeatures",
+      dependencies: [
+        "AthinaCore",
+        .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+      ],
+      swiftSettings: [.treatAllWarnings(as: .error)]
     ),
     // What the control API's requests and answers are, shared by the app's
     // server and athina-drive's client.
@@ -138,6 +164,15 @@ let package = Package(
         .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
       ],
       resources: [.copy("Fixtures")]
+    ),
+    .testTarget(
+      name: "AthinaFeaturesTests",
+      dependencies: [
+        "AthinaCore",
+        "AthinaFeatures",
+        .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
+      ],
+      swiftSettings: [.treatAllWarnings(as: .error)]
     ),
     .testTarget(
       // The app target itself, so the test draws the very views and
