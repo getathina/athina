@@ -8,10 +8,14 @@ name: CI
 # push to main and for a pull request only once it is ready for review; the
 # main ruleset requires all five, with pr-title.yml's title check, at a pull
 # request's head before it merges, and again on the merge queue's group before
-# it lands on main (docs/ci.md "The merge queue"). A pull request that touches
-# only documentation runs lint alone here: the changes job decides, and every
-# other job here is skipped, which a required check counts as passed
-# (docs/ci.md "Docs-only pull requests").
+# it lands on main (docs/ci.md "The merge queue"). A pull request into main,
+# outside a stack, that touches only documentation runs lint alone here: the
+# changes job decides, and every other job here is skipped, which a required
+# check counts as passed
+# (docs/ci.md "Docs-only pull requests"). Below the top of a stack, test and
+# lint run as ever, test-e2e runs its scenarios without comparing checkpoints,
+# and snapshots-smoke passes saying it skipped (docs/ci.md "Stacked pull
+# requests").
 on:
   push:
     branches: [main]
@@ -34,19 +38,33 @@ jobs:
     # snapshots-smoke read to skip themselves. Only a pull request is ever
     # docs-only: a push to main, and any other event, runs everything. The
     # checkout is the pull request merged into its base, so its first parent is
-    # the base and the diff between them is what the merge would change. Should
-    # this job fail, the others see no answer and run.
+    # the base and the diff between them is what the merge would change. Only a
+    # pull request outside a stack may be docs-only, and the same job says
+    # whether a stack lets this run skip the screenshot tests
+    # (scripts/stack-checks.sh). That skip holds only when this job succeeded,
+    # and only in a run's first attempt: rerunning one job keeps this job's
+    # first answer, so each reader checks the attempt too. Should this job
+    # fail, the others see no answer and run.
     runs-on: ubuntu-latest
     outputs:
       docs-only: ${{ steps.classify.outputs.docs-only || 'false' }}
+      screenshots: ${{ steps.stack.outputs.screenshots || 'run' }}
+      screenshots-reason: ${{ steps.stack.outputs.reason }}
     steps:
       - uses: actions/checkout@v7
         if: github.event_name == 'pull_request'
         with:
           fetch-depth: 2
+      - name: Read the pull request's place in its stack
+        id: stack
+        if: github.event_name == 'pull_request'
+        run: |
+          decision="$(scripts/stack-checks.sh "$GITHUB_EVENT_NAME" "$GITHUB_RUN_ATTEMPT" "$GITHUB_EVENT_PATH")"
+          echo "$decision"
+          echo "$decision" >> "$GITHUB_OUTPUT"
       - name: Classify the change
         id: classify
-        if: github.event_name == 'pull_request'
+        if: steps.stack.outputs.docs-only-allowed == 'true'
         run: |
           docs_only="$(scripts/docs-only.sh HEAD^1 HEAD)"
           echo "Docs-only: $docs_only"
@@ -112,10 +130,15 @@ jobs:
     # snapshots compares a snapshot (docs/ci.md "Checkpoints"). The app is launched through
     # LaunchServices (--launch open): exec'd from this job's shell, which the
     # runner image grants Accessibility, it would inherit the grant, and the
-    # run could never catch a change that made the API tier need one.
+    # run could never catch a change that made the API tier need one. Below
+    # the top of a stack the scenarios run once and no checkpoint is compared
+    # or published.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
     runs-on: macos-26
+    env:
+      SKIP_SCREENSHOTS: ${{ needs.changes.result == 'success' && needs.changes.outputs.screenshots == 'skip' && github.run_attempt == 1 }}
+      SKIP_REASON: ${{ needs.changes.outputs.screenshots-reason }}
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
@@ -170,10 +193,19 @@ jobs:
           echo "::error::The Dock never hid, so the tallest Settings panes would be cut off." >&2
           exit 1
       - name: Run the API tier twice and compare its checkpoints with their baselines
+        if: env.SKIP_SCREENSHOTS != 'true'
         # The first run compiles the tests, with the E2EAPI trait in a build
         # directory of their own under .build, which the cache keeps.
         timeout-minutes: 30
         run: scripts/snapshots.sh checkpoints --launch open
+      - name: Run the API tier without comparing its checkpoints
+        # The same scenarios, launched the same way, so only the screenshot
+        # test is skipped: a failed scenario still fails the job.
+        if: env.SKIP_SCREENSHOTS == 'true'
+        timeout-minutes: 30
+        run: |
+          echo "Skipped the checkpoint comparison: $SKIP_REASON. The scenarios still run. To compare the checkpoints on this commit, re-run all jobs." | tee -a "$GITHUB_STEP_SUMMARY"
+          scripts/e2e/athina-e2e run --tier api --jobs 4 --launch open --out "$PWD/build/checkpoints/runs/functional" all
       - name: Summarize
         if: always()
         run: |
@@ -206,17 +238,30 @@ jobs:
     # Xcode as the snapshots baselines were (docs/ci.md "UI snapshot smoke
     # test"). One runner: most of the job is fetching and compiling, which the
     # build cache cuts to what changed, and drawing every image takes about a
-    # minute, where four runners each compiled it again.
+    # minute, where four runners each compiled it again. Below the top of a
+    # stack it draws nothing and passes on Ubuntu, saying why, rather than be a
+    # skipped job, which has no summary, or hold a macOS runner.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
-    runs-on: macos-26
+    runs-on: ${{ (needs.changes.result == 'success' && needs.changes.outputs.screenshots == 'skip' && github.run_attempt == 1) && 'ubuntu-latest' || 'macos-26' }}
+    env:
+      SKIP_SCREENSHOTS: ${{ needs.changes.result == 'success' && needs.changes.outputs.screenshots == 'skip' && github.run_attempt == 1 }}
+      SKIP_REASON: ${{ needs.changes.outputs.screenshots-reason }}
     steps:
+      - name: Say why the screenshot test is skipped
+        if: env.SKIP_SCREENSHOTS == 'true'
+        run: |
+          echo "Skipped: $SKIP_REASON, so no snapshot was drawn. To draw them on this commit, re-run all jobs." | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/checkout@v7
+        if: env.SKIP_SCREENSHOTS != 'true'
       - uses: ./.github/actions/select-xcode
+        if: env.SKIP_SCREENSHOTS != 'true'
       - uses: ./.github/actions/swiftpm-cache
+        if: env.SKIP_SCREENSHOTS != 'true'
         with:
           name: snapshots-smoke
       - name: Draw every snapshot and compare with its reference
+        if: env.SKIP_SCREENSHOTS != 'true'
         timeout-minutes: 20
         run: make snapshots-smoke
       - name: Summarize

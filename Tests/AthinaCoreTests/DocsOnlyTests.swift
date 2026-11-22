@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// scripts/docs-only.sh, which CI's changes job asks about every pull request.
+/// scripts/docs-only.sh, which CI's changes job asks about pull requests outside stacks.
 ///
 /// A pull request touching only documentation skips the build, the end-to-end
 /// tier and the screenshots (docs/ci.md "Docs-only pull requests"). A wrong true lets

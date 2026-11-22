@@ -194,8 +194,11 @@ For example `feat(history): search past suggestions`,
    gate, on four runners, and runs it on every push after; on a draft it
    passes without rendering and its job summary says it skipped. The
    `main` ruleset requires all five checks at the pull request's head, and
-   `pr-title`, which checks the title on every push and every edit of it. A
-   pull request that changes only documentation runs `lint` and `pr-title`
+   `pr-title`, which checks the title on every push and every edit of it. In
+   a stack only the top runs the screenshot tests, and the layers below pass
+   them saying they skipped (see [Stacked pull
+   requests](docs/ci.md#stacked-pull-requests)). A pull request into main,
+   outside a stack, that changes only documentation runs `lint` and `pr-title`
    alone and reports the other four as skipped, which passes them (see [Docs-only pull
    requests](docs/ci.md#docs-only-pull-requests)).
 4. **An intended UI change** fails the image gates until it is approved: read
