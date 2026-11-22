@@ -11,17 +11,16 @@ every rule it can only report, and CI runs `make lint` on every pull request
 and every push to `main`.
 
 A newer swift-format can format the same code differently, so the one CI runs
-is pinned: `.xcode-version` names the Xcode every CI job runs, and so the
-swift-format it ships with, as `xcodebuild -version` prints it (26.6 today:
-Swift 6.3.3, swift-format 6.3.0). The `lint` job selects that Xcode by its
-exact path, as every job does (see [Continuous integration](ci.md)), and prints the
+is pinned: `.xcode-version` names the Xcode every CI job but `test` runs, and so the
+swift-format it ships with, as `xcodebuild -version` prints it (27.1 today:
+Swift 6.4, and a swift-format that reports its version as `main`). The `lint` job selects that Xcode by its
+exact path, as every job does its own (see [Continuous integration](ci.md)), and prints the
 Swift and swift-format versions that ran. `make format` and `make lint` read the same file and warn when the
 selected Xcode is another; `DEVELOPER_DIR=<path to that Xcode.app>`
-runs either with the pinned one. Xcode 27.0's swift-format, which reports its
-version as `main`, formats this code identically today.
+runs either with the pinned one.
 
-To move the pin, once the `macos-26` image lists the new Xcode (its
-[readme](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
+To move the pin, once the `xcode-27` image lists the new Xcode (its
+[readme](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
 names each path):
 
 1. Write the new version into `.xcode-version`.
@@ -55,13 +54,14 @@ names each path):
   CoreGraphics too, not through AppKit or SwiftUI), and nothing else.
 - A real-time wait in the app's targets is
   `Task.sleep(until: .now + d, clock: .continuous)`, never
-  `Task.sleep(for: d)`. The pinned Swift 6.3 links our copy of
+  `Task.sleep(for: d)`. Swift 6.3, which Xcode 26 ships, links our copy of
   `Clock.sleep(for:)`'s `ContinuousClock` specialization and
   KeyboardShortcuts' copy, whose sizes differ, into one, which corrupts the
-  task allocator and crashes the app in CI's `test-e2e`
+  task allocator and crashes the app
   ([swiftlang/swift#86204](https://github.com/swiftlang/swift/issues/86204));
-  a Mac on Swift 6.4 never shows it. The rule can go once the pin reaches
-  Swift 6.4.
+  `test-e2e`, the job that launches the app, builds with Swift 6.4, which
+  never shows it, so CI cannot catch it. The rule can go once Xcode 26 is no
+  longer supported.
 
 ## Rebasing a branch across the reformat
 

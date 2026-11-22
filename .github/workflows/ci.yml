@@ -53,14 +53,19 @@ jobs:
           echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
 
   test:
-    # The package targets macOS 26, so it needs the Xcode 26 SDK that the
-    # macos-26 image ships. Older images cannot build it.
+    # The one macOS job not on xcode-27 (docs/ci.md "Xcode, pinned"): that
+    # image's virtual machine cannot run Vision's accurate text recognition,
+    # Athina's default, which TextRecognizerTests runs. On macos-26 every test
+    # runs, and on the oldest macOS Athina supports, built with Xcode 26's
+    # Swift 6.3. That image has no Xcode 27, so this job pins its own Xcode.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
+        with:
+          version: '26.6'
       - uses: ./.github/actions/swiftpm-cache
         with:
           name: test
@@ -83,7 +88,7 @@ jobs:
     # anchor in the Markdown resolves (scripts/lint.sh). Then the drift check:
     # the rules GitHub enforces on main against the committed ruleset. Never
     # skipped, so a docs-only pull request gets its links checked.
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
@@ -115,7 +120,7 @@ jobs:
     # run could never catch a change that made the API tier need one.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
@@ -170,10 +175,30 @@ jobs:
           echo "::error::The Dock never hid, so the tallest Settings panes would be cut off." >&2
           exit 1
       - name: Run the API tier twice and compare its checkpoints with their baselines
+        id: checkpoints
         # The first run compiles the tests, with the E2EAPI trait in a build
         # directory of their own under .build, which the cache keeps.
         timeout-minutes: 30
         run: scripts/snapshots.sh checkpoints --launch open
+      - name: Check that checkpoints are captured with ScreenCaptureKit
+        id: capture
+        # A copy without Screen Recording draws layer trees and says so only
+        # under --snapshot, so the hermetic copy that took the checkpoints is
+        # opened once more as they were, to render one shard and say which way
+        # it captures. It runs after a drift too, which is when the checkpoints
+        # may be approved, and they are published only when it passes.
+        if: ${{ !cancelled() && steps.checkpoints.outcome != 'skipped' }}
+        timeout-minutes: 5
+        run: |
+          probe="$(mktemp -d "$RUNNER_TEMP/capture.XXXXXX")"
+          open -n -g -W --env "CFFIXED_USER_HOME=$probe" --env "HOME=$probe" \
+            --stdout "$probe/stdout" --stderr "$probe/stderr" \
+            build/e2e/Athina.app --args --snapshot "$probe/render" --snapshot-shard 1/4
+          cat "$probe/stdout" "$probe/stderr"
+          if ! grep -qxF "snapshot: capturing each window with ScreenCaptureKit" "$probe/stdout" "$probe/stderr"; then
+            echo "::error::The hermetic copy did not capture with ScreenCaptureKit, so this run's checkpoints must not be approved (docs/ci.md \"Checkpoints\")."
+            exit 1
+          fi
       - name: Summarize
         if: always()
         run: |
@@ -181,8 +206,9 @@ jobs:
             if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
           done
       - name: Upload the checkpoints
-        # What `make snapshots-approve` fetches to approve a checkpoint drift.
-        if: always()
+        # What `make snapshots-approve` fetches to approve a checkpoint drift,
+        # so never ones captured another way.
+        if: ${{ always() && steps.capture.outcome == 'success' }}
         uses: actions/upload-artifact@v7
         with:
           name: checkpoints
@@ -201,15 +227,15 @@ jobs:
 
   snapshots-smoke:
     # The fast UI check, and the check the main ruleset requires: draws every
-    # snapshot in the test process with swift-snapshot-testing and compares
-    # each with its reference image, recorded on this image with the pinned
+    # snapshot in the test process and compares each with swift-snapshot-testing
+    # against its reference image, recorded on this image with the pinned
     # Xcode as the snapshots baselines were (docs/ci.md "UI snapshot smoke
     # test"). One runner: most of the job is fetching and compiling, which the
-    # build cache cuts to what changed, and drawing every image takes about a
-    # minute, where four runners each compiled it again.
+    # build cache cuts to what changed, and drawing every image takes about
+    # two minutes, where four runners each compiled it again.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode

@@ -1,7 +1,11 @@
 # Continuous integration
 
-CI runs five checks on GitHub's `macos-26` runner, which ships Xcode 26 and
-the macOS 26 SDK this package targets: `test` runs `make test`: `swift test`, then
+CI runs five checks, all but `test` on GitHub's `xcode-27` runner, a public
+preview image of macOS 27 whose Xcode 27.1 builds this package for the macOS 26
+it targets with the macOS 27 SDK. `test` runs on `macos-26` with Xcode 26.6 and
+Swift 6.3 (see Xcode, pinned, below), so it alone proves the supported minimum,
+and only as far as the unit tests and a debug build go: no job launches the app,
+draws its UI or builds a release there. Of the five, `test` runs `make test`: `swift test`, then
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
 tests' build already made rather than compiling the package again; `lint`
@@ -13,8 +17,8 @@ checks that it carries the control API, runs every API-tier scenario of the
 end-to-end harness and compares their checkpoints with approved baselines (see
 [Checkpoints](#checkpoints));
 `snapshots-smoke`, the fast UI check, draws every
-snapshot inside a test process with swift-snapshot-testing and compares each
-with its reference image (see [UI snapshot smoke test](#ui-snapshot-smoke-test)); and `snapshots`, the
+snapshot inside a test process and compares each with swift-snapshot-testing
+against its reference image (see [UI snapshot smoke test](#ui-snapshot-smoke-test)); and `snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
 through the window server, so Liquid Glass and materials are in them,
 replay-mode renders on a scaled clock included, compares the renders with the
@@ -171,7 +175,7 @@ release is offered only once it is three days old (`minimumReleaseAge`), time
 for a broken or compromised release to be pulled first; one whose registry
 gives no release date waits too, and security updates come at once. The
 runner images are left out, since moving CI to a new macOS image is a
-deliberate commit (see One Xcode, pinned, below). The root `Package.resolved` stays uncommitted (see
+deliberate commit (see Xcode, pinned, below). The root `Package.resolved` stays uncommitted (see
 [UI snapshot smoke test](#ui-snapshot-smoke-test)), which Renovate does not
 need. Nothing runs until two steps in the repository's settings, which take an
 admin: install the Mend Renovate GitHub App on the repository, and turn on the
@@ -210,17 +214,26 @@ toolchain and manifest is restored, a pull request's own before main's, and a
 successful run saves its own. GitHub evicts the least recently used caches
 beyond the repository's 10 GB.
 
-**One Xcode, pinned.** Every macOS job selects the Xcode that `.xcode-version`
-names, as `xcodebuild -version` prints it (26.6 today), through the shared
+**Xcode, pinned.** There are two pins. Every macOS job but `test` runs on
+`xcode-27` and selects the Xcode that `.xcode-version`
+names, as `xcodebuild -version` prints it (27.1 today). `test` runs on
+`macos-26` and selects Xcode 26.6, which it names in
+`.github/workflows/ci.yml`: the `xcode-27` image's virtual machine cannot run
+Vision's accurate text recognition, Athina's default, so
+`TextRecognizerTests` fails there, and on `macos-26`, which has no Xcode 27,
+every test runs and nothing is skipped. The exception can go once that test
+passes on `xcode-27`, though CI then stops testing macOS 26, Xcode 26 and
+Swift 6.3 at all. Each job selects its Xcode through the shared
 step in `.github/actions/select-xcode`: by its exact path on the runner,
 `/Applications/Xcode_<version>.app` or the image's other name for it,
 `/Applications/Xcode_<version>.0.app`, never the newest there. It fails,
 naming the Xcodes the runner has, when neither exists, and fails when that
 Xcode reports another version. So a new runner image changes no build, render
-or formatting by itself: moving the pin is one deliberate commit that
+or formatting by itself: moving `.xcode-version` is one deliberate commit that
 refreshes both sets of approved images and runs `make format` with the new
-swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-snapshot-baselines)). When GitHub's macOS
-27 image leaves preview, CI moves to it in such a commit.
+swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-snapshot-baselines)). The runner's
+labels are fixed the same way, but GitHub updates the image behind each, macOS
+included, so a render can still drift with no change here.
 
 **Superseded runs.** A new push to a pull request cancels that pull request's
 runs still going, in both workflows, so a superseded commit stops holding runners: the account
@@ -241,7 +254,7 @@ failing check says what to run:
 
 | Check | On a Mac | In CI |
 | --- | --- | --- |
-| `test` | `make test` | the same |
+| `test` | `make test` | the same, on macOS 26 with Xcode 26.6 |
 | `lint` | `make lint` | the same, then the ruleset check above |
 | `test-e2e` | `make test-e2e`, the end-to-end scenarios | the API tier twice, its checkpoints compared with their baselines (see [Checkpoints](#checkpoints)) |
 | `snapshots-smoke` | `make snapshots-smoke` | the same |
@@ -426,21 +439,26 @@ In CI it runs on one runner, the `snapshots-smoke` job, the check the
 ruleset requires, which runs `make snapshots-smoke` and draws every
 snapshot. Most of that job is fetching and compiling, which the build cache
 cuts to what changed (see [Continuous integration](#continuous-integration)); drawing every image takes
-about a minute, where four runners each compiled the test again for a quarter
+about two minutes, where four runners each compiled the test again for a quarter
 of the drawing.
 `make snapshots-smoke SHARD=<k>/4` still draws only the snapshots
 `SnapshotShard` gives shard k (the test reads the shard from
 `UI_SNAPSHOTS_SMOKE_SHARD`), should it be split again.
 
-It draws each window inside the test process, with swift-snapshot-testing's
-view strategy on the window's frame view (the view under the content that
-paints the window's background), rather than capturing it from the window
+It composites each window's content inside the test process, with Core
+Animation's own compositor over the window's background
+(`InProcessCompositor`), rather than capturing it from the window
 server, so it builds and runs in a fraction of the time `snapshots` takes.
-Its pictures leave out what only the window server composites: Liquid Glass
-and materials are not drawn, so a toast shows its words and controls on the
-plain window background, and what sits on glass can take another colour or,
-like the toast's button bezels, close button and microphone in light mode,
-not show at all. Scroll bars are always shown, as on the runner, whatever the
+It does not ask the views to draw into a picture, as swift-snapshot-testing's
+view strategy does: on macOS 27 that runs drawing the window never shows,
+which wrote a recorder's shortcut twice, and applies no layer filters, which
+drew a toast's text black on dark glass. Its pictures are still not the
+window server's, so glass and materials can differ from `snapshots`', and a
+test process has no app bundle, so the app icon is a plain folder and the
+accent is the system's. The process that runs the test also declares the
+macOS 27 SDK where the app built by SwiftPM declares 26.0, and macOS can draw
+for each differently, as it colours selectable text on glass: `snapshots`
+shows what the app's own process draws. Scroll bars are always shown, as on the runner, whatever the
 Mac is set to. It catches a changed
 layout, text, colour, control or state; how glass looks is `snapshots`' to
 check. A pixel matches when it is within 2 Delta E of the reference (a
@@ -450,8 +468,8 @@ on every run for the reasons a `--snapshot` render does (see [UI snapshot
 baselines](#ui-snapshot-baselines)), in UTC and the runner's US English locale, drawn at the runner's
 1x scale whatever the display's: a fixed clock, animations and Core Animation's clock stopped, a window
 with a fixed backdrop, and captures until two in a row agree, in fresh windows
-until two agree. A window drawn in process is drawn as its layers stand, so
-it skips the frames `--snapshot` waits for before its first capture.
+until two agree. A window composited in process is pictured as its layers
+stand, so it skips the frames `--snapshot` waits for before its first capture.
 
 The test never records a reference. A snapshot with no reference fails, as a
 drifted one does, and a reference no snapshot produces fails until it is
@@ -552,7 +570,10 @@ outside the sandbox, so the harness refuses it on a Mac that holds Athina
 data. The job does grant the hermetic copy's identifier Screen Recording, and
 only that, in the runner's TCC database, so a checkpoint is captured with
 ScreenCaptureKit, glass, title bar and toolbar included, as `snapshots`
-captures a snapshot.
+captures a snapshot. A replay never says which way it captures, so once the
+scenarios are done the job opens that same copy with `--snapshot`, which does,
+prints what it said, and fails, publishing no checkpoints to approve, unless
+that is ScreenCaptureKit.
 
 **Approving an intended change.** Push the change and let `test-e2e` fail on
 the drift, look at the report, then run `make snapshots-approve`
@@ -560,7 +581,8 @@ the drift, look at the report, then run `make snapshots-approve`
 which downloads the `checkpoints` artifact of HEAD's newest CI run and makes
 `Tests/Checkpoints` match it the way it makes `Tests/Snapshots` match the
 `snapshots` renders. The job publishes the artifact only once
-both runs passed and agree, it names the source tree it was taken from, and
+both runs passed and agree and the copy captured with ScreenCaptureKit, it
+names the source tree it was taken from, and
 approving refuses any tree but HEAD's. Commit the images with the change that
 caused them. Baselines never come from a Mac: on a Mac a checkpoint is
 evidence of a run, never compared, since a Mac draws at another scale and

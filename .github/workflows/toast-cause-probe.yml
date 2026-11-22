@@ -1,0 +1,54 @@
+name: Toast cause probe
+
+# Temporary, never for main. Renders the toast on macOS 27 from the Xcode 26.6
+# release build main made at 3d2e9aa, whose Sources, Package.swift and
+# Resources are those of the Xcode 27.1 render of run 44981357893, so the
+# build is what differs between the two. One job: it compiles nothing and
+# checks out nothing.
+on:
+  push:
+    paths: ['.github/workflows/toast-cause-probe.yml']
+
+permissions:
+  actions: read
+
+jobs:
+  toast-cause-probe:
+    runs-on: xcode-27
+    timeout-minutes: 8
+    steps:
+      - name: Download main's Xcode 26.6 build
+        uses: actions/download-artifact@v8
+        with:
+          run-id: '44977935054'
+          artifact-ids: '14736304036'
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/artifact
+      - name: Check that it is that build
+        run: |
+          zip="$(find "$RUNNER_TEMP/artifact" -name Athina-0.2.0.zip)"
+          echo "3509ad95df54d28ee9da3a615fdf1d80b7a6a5e1bc06f110a353cd28363d01e6  $zip" | shasum -a 256 -c -
+          ditto -x -k "$zip" "$RUNNER_TEMP/app"
+          built="$(xcrun vtool -show-build "$RUNNER_TEMP/app/Athina.app/Contents/MacOS/Athina")"
+          echo "$built"
+          grep -qE "sdk 26\.5$" <<<"$built"
+      - name: Render the toast shard as the snapshots check does
+        run: |
+          sw_vers
+          echo "image ${ImageVersion:-unknown}"
+          TZ=UTC "$RUNNER_TEMP/app/Athina.app/Contents/MacOS/Athina" \
+            --snapshot "$RUNNER_TEMP/render" --snapshot-shard 1/4 \
+            -AppleLocale en_US -AppleLanguages '(en-US)' \
+            -AppleICUForce24HourTime NO -AppleShowScrollBars Always \
+            | tee "$RUNNER_TEMP/render.log"
+          grep -qxF "snapshot: capturing each window with ScreenCaptureKit" "$RUNNER_TEMP/render.log"
+      - name: Upload the toast, light and dark
+        uses: actions/upload-artifact@v7
+        with:
+          name: toast-xcode-26.6-on-macos-27
+          path: |
+            ${{ runner.temp }}/render/toast-light.png
+            ${{ runner.temp }}/render/toast-dark.png
+            ${{ runner.temp }}/render/toast-answered-light.png
+            ${{ runner.temp }}/render/toast-answered-dark.png
+          if-no-files-found: error

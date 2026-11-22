@@ -1,9 +1,16 @@
 name: Select the pinned Xcode
 description: >-
-  Selects the Xcode that .xcode-version pins, by its exact path on the runner,
-  and fails when the runner does not have it. Every macOS job uses it, so the
-  build, the tests, both UI checks and swift-format run on one Xcode, and a new
-  runner image never changes any of them unannounced (docs/ci.md).
+  Selects a pinned Xcode by its exact path on the runner, and fails when the
+  runner does not have it. Every macOS job uses it, with the Xcode that
+  .xcode-version pins but for the test job, which names its own (docs/ci.md
+  "Xcode, pinned"), so a new runner image never changes a build, test, UI check
+  or swift-format unannounced.
+inputs:
+  version:
+    description: >-
+      The Xcode to select in place of the one .xcode-version pins, as
+      xcodebuild -version prints it. Only the test job passes one.
+    required: false
 runs:
   using: composite
   steps:
@@ -13,19 +20,23 @@ runs:
       # baselines and format Swift differently, failing every pull request with
       # no change. The image names an Xcode both <version>.app and
       # <version>.0.app.
+      env:
+        VERSION: ${{ inputs.version }}
       run: |
-        pin="$(cat .xcode-version)"
+        pin="${VERSION:-$(cat .xcode-version)}"
+        pinned_by="${VERSION:+the workflow}"
+        pinned_by="${pinned_by:-.xcode-version}"
         for xcode in "/Applications/Xcode_$pin.app" "/Applications/Xcode_$pin.0.app" ""; do
           [ -z "$xcode" ] || [ -d "$xcode" ] && break
         done
         if [ -z "$xcode" ]; then
-          echo "::error::The runner has no Xcode $pin at /Applications/Xcode_$pin.app or /Applications/Xcode_$pin.0.app, the Xcode .xcode-version pins; it has $(ls -d /Applications/Xcode_*.app | xargs). Bump the pin (docs/ci.md)."
+          echo "::error::The runner has no Xcode $pin at /Applications/Xcode_$pin.app or /Applications/Xcode_$pin.0.app, the Xcode $pinned_by pins; it has $(ls -d /Applications/Xcode_*.app | xargs). Bump the pin (docs/ci.md)."
           exit 1
         fi
         echo "Using $xcode"
         sudo xcode-select -s "$xcode"
         if [ "$(xcodebuild -version | head -n1)" != "Xcode $pin" ]; then
-          echo "::error::$xcode is $(xcodebuild -version | head -n1), not the Xcode $pin that .xcode-version pins."
+          echo "::error::$xcode is $(xcodebuild -version | head -n1), not the Xcode $pin that $pinned_by pins."
           exit 1
         fi
         sw_vers
