@@ -18,8 +18,9 @@
 # SwiftPM needs, and over which a guest can reach what this Mac serves on every
 # interface.
 #
-# It installs nothing, changes no permission on this Mac and has no fallback:
-# without Tart, or without the disk the image needs, it stops and says why.
+# On this Mac it installs nothing, changes no permission and has no fallback:
+# without Tart, or without the disk the image needs, it stops and says why. The
+# one install is bash 4, inside the VM, when the image has none.
 set -euo pipefail
 
 # cirruslabs/macos-golden-gate-xcode, tag 27.1. The sizes are its manifest's:
@@ -89,7 +90,7 @@ trap 'exit 143' TERM
 
 [ "$#" -eq 0 ] || die "it takes no arguments"
 command -v tart >/dev/null \
-	|| die "Tart is not installed (https://tart.run); this installs nothing and never uses this Mac's screen instead"
+	|| die "Tart is not installed (https://tart.run); this installs nothing here and never uses this Mac's screen instead"
 changed="$(git -C "$ROOT" status --porcelain)" || die "could not read the checkout's git status"
 [ -z "$changed" ] || die "the checkout has uncommitted changes, and the VM is sent only HEAD: commit them first"
 commit="$(git -C "$ROOT" rev-parse HEAD)" || die "could not read HEAD"

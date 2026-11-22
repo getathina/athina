@@ -4,8 +4,10 @@
 # leaves everything to copy out in ~/athina-evidence. It is written for macOS's
 # bash 3.2, since it is what finds out whether there is a newer one.
 #
-# Nothing of the image is assumed and nothing is put right: a missing bash 4 or
-# grant fails with that reason.
+# Nothing of the image is assumed. When it has no bash 4 or newer, Homebrew
+# installs one, as CI does on its runner, which only ever happens in this VM: it
+# comes after the guard below. Nothing else is put right: a missing grant, or a
+# bash that will not install, fails with that reason.
 set -uo pipefail
 
 # The device Tart gives every guest, which its guest agent looks for too. This
@@ -35,8 +37,18 @@ fail() {
 	printf 'bash %s\n' "$(bash -c 'echo "$BASH_VERSION"')"
 } >"$EVIDENCE/environment.txt" 2>&1
 
-bash -c '[ "${BASH_VERSINFO[0]}" -ge 4 ]' \
-	|| fail "the image has no bash 4 or newer first on PATH ($(command -v bash) is older), which athina-e2e needs"
+bash_is_4() { bash -c '[ "${BASH_VERSINFO[0]}" -ge 4 ]'; }
+
+if ! bash_is_4; then
+	echo "tart-guest: no bash 4 or newer, so installing one in this VM"
+	brew install bash >"$EVIDENCE/bash-install.log" 2>&1 \
+		|| fail "the image has no bash 4 or newer and brew install bash failed in the VM (see evidence/bash-install.log)"
+	# This shell remembers where it found the older one.
+	hash -r
+	printf 'bash %s, installed in this VM\n' "$(bash -c 'echo "$BASH_VERSION"')" >>"$EVIDENCE/environment.txt"
+	bash_is_4 \
+		|| fail "brew install bash left $(command -v bash) first on PATH in the VM, which is older than the bash 4 athina-e2e needs"
+fi
 
 echo "tart-guest: building athina-drive to check the grants"
 (cd "$ROOT" && swift build -q --product athina-drive) >"$EVIDENCE/drive-build.log" 2>&1 \
