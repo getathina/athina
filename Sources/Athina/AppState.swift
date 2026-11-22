@@ -156,7 +156,8 @@ final class AppState {
   private(set) var talkBack: TalkBackState = .idle
   var lastCallout: CalloutRecord?
   var lastTranscript: TranscriptRecord?
-  /// Whether the system recognizer can transcribe the current locale on this Mac.
+  /// Whether the system recognizer can transcribe the current locale on this Mac, or
+  /// `hermeticSpeechAvailability` in a hermetic run.
   let speechAvailability: SpeechListener.Availability
 
   /// Whether the Setup window's permissions page should open at launch.
@@ -300,7 +301,12 @@ final class AppState {
       controlMode.isHermetic
       ? [] : Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
     needsPermissionsOnboarding = !status.allGranted
-    speechAvailability = SpeechListener.availability()
+    // Nor whether the Mac understands speech, which would make its pictures
+    // differ by machine (a virtual machine understands none): it hears only
+    // a script.
+    speechAvailability =
+      controlMode.isHermetic
+      ? AppState.hermeticSpeechAvailability : SpeechListener.availability()
     // A live launch has not read its key yet (`start` does, off the main
     // thread), so its walk through has the model page, and keeps it even
     // once a saved key is found: the walk's pages are fixed at its start.
@@ -621,6 +627,12 @@ final class AppState {
     accessibility: true,
     microphone: true,
     speechRecognition: true
+  )
+
+  /// What a hermetic run has instead of asking macOS about speech: the US
+  /// English its checkpoints are drawn in, named as macOS names that locale.
+  static let hermeticSpeechAvailability = SpeechListener.Availability.available(
+    locale: "English (United States)"
   )
 
   // MARK: Actions

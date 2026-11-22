@@ -11,11 +11,15 @@
     /// allow it. It is still up after the replay's clock moves a minute on, far past the reading
     /// time that takes an ordinary note down, and after a key press in one of Athina's windows,
     /// posted to Athina's own event queue as the window server delivers one (docs/e2e.md "The
-    /// control API"); a click outside Athina's windows takes it down.
+    /// control API"); a click outside Athina's windows takes it down. It is launched in a
+    /// locale other than US English, which the Language row would name had the run asked the Mac
+    /// about speech, so that row also proves a hermetic run never asks (docs/e2e.md "Hermetic
+    /// runs").
     @Test func `toast-note-dismissal`() async {
       await Run.scenario(
         "toast-note-dismissal",
-        arguments: ["--open", "settings:general"],
+        // The last -AppleLocale wins, so this replaces the harness's own.
+        arguments: ["-AppleLocale", "en_GB", "--open", "settings:general"],
         consented: false
       ) { run in
         let control = run.control
@@ -38,6 +42,17 @@
         guard try await control.waitWindow("General", timeout: 20) else {
           throw AppProcess.Failure("Settings never opened on the General pane")
         }
+        let language = {
+          try await control.find(.everything(in: "General")).flatMap(\.texts).first {
+            $0.hasPrefix("Available for ") || $0.hasPrefix("Speech in ")
+          } ?? ""
+        }
+        let available = "Available for English (United States)"
+        run.check(
+          "speech is available as English, whatever this Mac understands",
+          available,
+          try await run.settled(available, language)
+        )
         guard try await control.click(recorder).ok,
           try await control.key(17, holding: [.control, .option, .command], in: "General").ok,
           try await control.waitSetting("mentor.pushToTalkHotKey", equals: talkBack).ok
