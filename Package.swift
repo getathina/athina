@@ -41,9 +41,9 @@ let package = Package(
   ],
   dependencies: [
     // Each pinned exactly. The Composable Architecture depends on packages
-    // of its own, each by a range, so the committed Package.resolved, resolved
-    // with every trait on, holds every package in the graph to one version
-    // (docs/ci.md "Dependency updates").
+    // of its own, each by a range, and by a manifest of its own either side of
+    // Swift 6.4, so the committed Package.resolved holds both graphs, with
+    // every trait on, to fixed versions (docs/ci.md "Dependency updates").
     //
     // The journal's SQLite access and its live queries (Journal.swift).
     .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1"),

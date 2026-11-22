@@ -175,18 +175,26 @@ for a broken or compromised release to be pulled first; one whose registry
 gives no release date waits too, and security updates come at once. The
 runner images are left out, since moving CI to a new macOS image is a
 deliberate commit (see One Xcode, pinned, below). The root `Package.resolved`
-is committed, resolved with every package trait on, so every build uses one
-version of every package, those The Composable Architecture brings by range
-included, and a build with any set of traits leaves the file as it is (see
-[UI snapshot smoke test](#ui-snapshot-smoke-test)). SwiftPM stamps the file
+is committed, resolved with every package trait on, so every build on a
+toolchain uses the same versions, those The Composable Architecture brings by
+range included, and a build with any set of traits leaves the file as it is
+(see [UI snapshot smoke test](#ui-snapshot-smoke-test)). The graph is not the
+same on every toolchain: below Swift 6.4, as on CI's pinned Xcode, Point-Free's
+packages depend on `xctest-dynamic-overlay`, and from 6.4 on
+`swift-issue-reporting`, so the file pins both, and each build fetches both and
+builds the one its toolchain uses. SwiftPM stamps the file
 with the hash of the `Package.swift` it resolved and resolves again whenever
 the two differ, so a stale file would have every build rewrite it: before it
 builds, `test` runs `scripts/check-package-resolved.sh`, which fails unless the
-file carries this manifest's hash and pins every package the manifest names,
-and after the tests it fails if the build changed the file anyway.
+file carries this manifest's hash and pins every package the manifest names
+and both of those two, and after the tests it fails if the build changed the file anyway.
 `scripts/check-package-resolved.sh --fix` writes the file again, keeping every
-pinned version. Renovate moves the pin it updates in the file but resolves
-nothing, so its Swift pull request, whose description says so, fails `test`
+pinned version that still satisfies the manifests and carrying over the pin the
+toolchain it runs on does not use. Should an update need that one newer, only
+that toolchain shows it, by changing the file: CI's, below 6.4, in the step
+after the tests, which fails and prints the pin to commit, and one from 6.4
+only in the checkout it builds. Renovate moves the pin it updates in the file
+but resolves nothing, so its Swift pull request, whose description says so, fails `test`
 until `--fix` is run on its branch and the file committed; a package
 `Package.swift` does not name moves only when someone runs `swift package
 update` on purpose and then `--fix`. Nothing runs until two steps in the repository's settings, which take an
