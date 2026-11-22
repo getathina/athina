@@ -1,5 +1,7 @@
 import AppKit
 import AthinaCore
+import AthinaFeatures
+import ComposableArchitecture
 import CoreGraphics
 import CoreServices
 import Foundation
@@ -759,7 +761,11 @@ extension AppState {
         createdAt: (now ?? Snapshots.referenceDate).addingTimeInterval(-7990)
       )
     ]
-    let state = AppState(sampleWithSettings: settings, speechAvailability: speechAvailability)
+    let state = AppState(
+      sampleWithSettings: settings,
+      showing: SampleSuggestions.make(now: now ?? Snapshots.referenceDate).first,
+      speechAvailability: speechAvailability
+    )
     let now = now ?? state.clock.date
     let focus = FocusContext(
       timestamp: now,
@@ -952,7 +958,6 @@ extension AppState {
       suggestions[index].calloutShown = region != nil
     }
     state.journaledSuggestions = suggestions
-    state.activeSuggestion = suggestions.first
     state.followUps =
       SampleSuggestions.followUps(now: now, suggestionID: 3)
       + SampleSuggestions.followUps(now: now, suggestionID: 4)
@@ -1095,12 +1100,14 @@ extension AppState {
         "workspace/mentor/Tests/AthinaCoreTests/Fixtures/Replay",
         isDirectory: true
       )
+    let ahead: TimeInterval = 26 * 3600
     let state = AppState(
       sampleWithSettings: sample().settings,
+      showing: SampleSuggestions.make(now: Snapshots.referenceDate.addingTimeInterval(ahead)).first,
       clientMode: .replay(directory: directory, allowStale: false),
       clockMode: .replay(scale: 60, ahead: 0)
     )
-    state.advanceClock(by: 26 * 3600)
+    state.advanceClock(by: ahead)
     let live = sample(at: state.clock.date)
     state.focus = live.focus
     state.latestObservation = live.latestObservation
@@ -1112,7 +1119,6 @@ extension AppState {
     state.journalStats = live.journalStats
     state.timeline = live.timeline
     state.journaledSuggestions = live.journaledSuggestions
-    state.activeSuggestion = live.activeSuggestion
     state.replaySummary = ReplaySummary(
       directory: directory,
       countsByKind: ["triage": 5, "mentor": 3, "test": 1],
@@ -1404,10 +1410,16 @@ struct SampleMenuBarMarks: View {
 /// The note the toast shows on its own, for a talk-back press with nothing to reply to.
 struct SampleToastNote: View {
   var body: some View {
-    let model = ToastModel()
-    model.note = "Nothing to reply to yet: Athina has not made a suggestion."
+    let store: HostedStoreOf<ToastFeature> = HostedStore(
+      initialState: ToastFeature.State(
+        note: ToastFeature.Note("Nothing to reply to yet: Athina has not made a suggestion.")
+      ),
+      parent: HostedParent<ToastFeature.Action.Delegate>()
+    ) {
+      EmptyReducer()
+    }
     return VStack(spacing: 0) {
-      ToastView(model: model) { _ in }
+      ToastView(store: store)
         .fixedSize(horizontal: false, vertical: true)
       Spacer(minLength: 0)
     }
@@ -1425,19 +1437,25 @@ struct SampleToast: View {
   var outlined: String?
 
   var body: some View {
-    let model = ToastModel()
-    model.outlined = outlined
-    model.suggestion = SampleSuggestions.make(now: Snapshots.referenceDate).first {
-      suggestionID == nil || $0.id == suggestionID
+    let store: HostedStoreOf<ToastFeature> = HostedStore(
+      initialState: ToastFeature.State(
+        suggestion: SampleSuggestions.make(now: Snapshots.referenceDate).first {
+          suggestionID == nil || $0.id == suggestionID
+        },
+        expanded: expanded,
+        exchange: exchange,
+        talkBack: talkBack,
+        talkBackKey: "⌃⌥⌘T",
+        outlined: outlined
+      ),
+      parent: HostedParent<ToastFeature.Action.Delegate>()
+    ) {
+      EmptyReducer()
     }
-    model.expanded = expanded
-    model.talkBack = talkBack
-    model.exchange = exchange
-    model.talkBackKey = "⌃⌥⌘T"
     // The panel sizes itself to the toast's ideal height; a fixed-size
     // snapshot gets the same by letting the toast hug its content.
     return VStack(spacing: 0) {
-      ToastView(model: model) { _ in }
+      ToastView(store: store)
         .fixedSize(horizontal: false, vertical: true)
       Spacer(minLength: 0)
     }

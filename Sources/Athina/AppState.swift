@@ -1,5 +1,7 @@
 import AppKit
 import AthinaCore
+import AthinaFeatures
+import ComposableArchitecture
 import CoreGraphics
 import Foundation
 import OSLog
@@ -93,7 +95,7 @@ final class AppState {
         reloadKeyHint()
         if !settings.hasConsent, !isSample { perform(.openConsent) }
       }
-      toast.setTalkBackKey(talkBackKey)
+      send(.toast(.talkBackKeyChanged(talkBackKey)))
     }
   }
 
@@ -103,7 +105,7 @@ final class AppState {
   private(set) var pushToTalkRegistered = false
 
   var mode: SensingMode = .stopped {
-    didSet { toast.sensingMode = mode }
+    didSet { send(.toast(.sensingModeChanged(mode))) }
   }
   var permissions: PermissionStatus
   /// Permissions the system has never asked about, so asking shows its alert.
@@ -137,7 +139,7 @@ final class AppState {
   /// Newest first, across every suggestion.
   var followUps: [FollowUp] = []
   /// The suggestion currently shown as a toast, if any.
-  var activeSuggestion: Suggestion?
+  var activeSuggestion: Suggestion? { features.toast.suggestion }
   /// The suggestions the History window lists, newest first: the journaled
   /// ones but the one the loop holds while a talked-to toast is up.
   var suggestionHistory: [Suggestion] {
@@ -227,16 +229,14 @@ final class AppState {
   private var liveListTasks: [Task<Void, Never>] = []
   private var resourceTask: Task<Void, Never>?
   private var saveTask: Task<Void, Never>?
-  private var toastTask: Task<Void, Never>?
-  private var toastCountdown = ToastCountdown()
-  /// Whether the pointer is over the toast, kept through an exchange so a
-  /// countdown given back afterwards does not run under it.
-  private var toastHovered = false
   /// The toast the user has talked to: a transcript was matched to an answer or
   /// a question was asked.
   ///
   /// A press that heard nothing does not count.
   private var talkedToSuggestionID: Int64?
+  /// The ported features' store, which `Hosted` is the interim root of.
+  private let features: HostedStoreOf<Hosted>
+  private let hostedParent: HostedParent<Hosted.Delegate>
   private let toast: ToastController
   private let callouts = CalloutController()
   private var calloutTask: Task<Void, Never>?
@@ -265,9 +265,17 @@ final class AppState {
     let (launchClock, launchClockControl) = clockMode.makeClock()
     (clock, clockControl) = (launchClock, launchClockControl)
     FeatureDependencies.prepare(clock: launchClock)
+    let parent = HostedParent<Hosted.Delegate>()
+    hostedParent = parent
+    features = HostedStore(initialState: Hosted.State(), parent: parent) {
+      Hosted(parent: parent)
+    }
     // A hermetic run listens to no click outside its own windows and to
     // no microphone; the control API stands in for both.
-    toast = ToastController(clock: clock, watchesOtherApps: !controlMode.isHermetic)
+    toast = ToastController(
+      store: features.scope(\.toast, action: \.toast),
+      watchesOtherApps: !controlMode.isHermetic
+    )
     listener = SpeechListener(clock: clock, hears: controlMode.isHermetic ? .script : .microphone)
     var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
     // The settings first, so that a --settings file that is there but is
@@ -314,8 +322,12 @@ final class AppState {
   }
 
   /// A detached state for snapshots and previews: never starts the pipeline.
+  ///
+  /// With `showing`, its toast holds that suggestion, with none of what
+  /// showing one does.
   init(
     sampleWithSettings settings: SensingSettings,
+    showing suggestion: Suggestion? = nil,
     clientMode: ModelClientMode = .live,
     clockMode: ClockMode = .system,
     speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")
@@ -331,10 +343,23 @@ final class AppState {
     controlMode = .off
     // A sample's time stands still at one fixed moment, so a render reads
     // the same however long it takes and whenever it runs.
-    (clock, clockControl) = clockMode.makeClock(
+    let (sampleClock, sampleClockControl) = clockMode.makeClock(
       base: AdjustableClock(startingAt: Snapshots.referenceDate)
     )
-    toast = ToastController(clock: clock)
+    (clock, clockControl) = (sampleClock, sampleClockControl)
+    let parent = HostedParent<Hosted.Delegate>()
+    hostedParent = parent
+    features = HostedStore(
+      initialState: Hosted.State(toast: ToastFeature.State(suggestion: suggestion)),
+      parent: parent,
+      reducer: {
+        Hosted(parent: parent)
+      },
+      withDependencies: {
+        $0.athinaClock = sampleClock
+      }
+    )
+    toast = ToastController(store: features.scope(\.toast, action: \.toast))
     listener = SpeechListener(clock: clock)
     // A fixed per-launch name, so a replay render reads the same every time.
     launchFiles = LaunchFiles(
@@ -371,6 +396,8 @@ final class AppState {
     // The keychain may put up its prompt on the first read after a
     // rebuild; off the main thread it never freezes the app behind it.
     reloadKeyHint()
+    hostedParent.receive = { [weak self] delegate in self?.handle(delegate) }
+    toast.start()
     hotKeys.onPress = { [weak self] slot in self?.hotKeyPressed(slot) }
     hotKeys.onRelease = { [weak self] slot in self?.hotKeyReleased(slot) }
     registerPauseHotKey()
@@ -421,16 +448,10 @@ final class AppState {
         self?.controlEvents.appendAnnouncement(text, priority: priority.name)
       }
     }
-    toast.onAction = { [weak self] id, feedback in
-      self?.respond(to: id, with: feedback)
-    }
-    toast.onHover = { [weak self] hovering in
-      self?.toastHoverChanged(hovering)
-    }
     callouts.onChange = { [weak self] outlined in
-      self?.toast.showOutlined(outlined)
+      self?.send(.toast(.outlinedChanged(outlined)))
     }
-    toast.setTalkBackKey(talkBackKey)
+    send(.toast(.talkBackKeyChanged(talkBackKey)))
     screenObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.didChangeScreenParametersNotification,
       object: nil,
@@ -781,7 +802,7 @@ final class AppState {
     let fresh = PermissionProbe.current()
     guard fresh != permissions else { return }
     permissions = fresh
-    toast.setTalkBackKey(talkBackKey)
+    send(.toast(.talkBackKeyChanged(talkBackKey)))
     Task { await pipeline?.permissionsMayHaveChanged() }
   }
 
@@ -978,10 +999,45 @@ final class AppState {
     }
   }
 
+  // MARK: Features
+
+  /// Sends to the features; by the time it returns the toast's panel has
+  /// followed, VoiceOver has been told and what they delegated has been acted
+  /// on (`HostedParent`).
+  private func send(_ action: Hosted.Action) {
+    features.send(action)
+  }
+
+  /// A short line for the person, in the toast or on its own.
+  private func showNote(_ text: String, untilClicked: Bool = false) {
+    send(.toast(.showNote(ToastFeature.Note(text, untilClicked: untilClicked))))
+  }
+
+  private func handle(_ delegate: Hosted.Delegate) {
+    switch delegate {
+    case .toast(.answered(let suggestion, let feedback)):
+      handleAnswer(feedback, to: suggestion.id, onToast: suggestion)
+    }
+  }
+
   // MARK: Suggestions
 
-  /// Records feedback for a suggestion, whether it came from the toast, the
-  /// history window, or a transcript.
+  /// Answers a suggestion from outside the toast: the menu, the history
+  /// window, a transcript, or the app ending it.
+  ///
+  /// Returns the task that journals the feedback, or nil when nothing was
+  /// recorded.
+  @discardableResult
+  func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) -> Task<Void, Never>? {
+    let shown = activeSuggestion.flatMap { $0.id == suggestionID ? $0 : nil }
+    if shown != nil {
+      send(.toast(.answered(suggestionID: suggestionID, feedback)))
+    }
+    return handleAnswer(feedback, to: suggestionID, onToast: shown)
+  }
+
+  /// What an answer does beyond the toast, wherever it was given: `shown` is
+  /// the toast's copy when it was on the toast, which has changed already.
   ///
   /// A non-answer (expiry or closing the toast) is recorded once and never
   /// overwrites anything: closing a re-shown toast just closes it. Tell me more
@@ -990,18 +1046,18 @@ final class AppState {
   /// Returns the task that journals the feedback, or nil when nothing was
   /// recorded.
   @discardableResult
-  func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) -> Task<Void, Never>? {
+  private func handleAnswer(
+    _ feedback: SuggestionFeedback,
+    to suggestionID: Int64,
+    onToast shown: Suggestion?
+  ) -> Task<Void, Never>? {
+    if shown != nil, feedback != .tellMeMore {
+      toastTakenDown()
+    }
     let listed = suggestionHistory.first { $0.id == suggestionID }
     // The toast's own copy for one the live list has not had back from the
     // journal yet.
-    let suggestion = listed ?? activeSuggestion.flatMap { $0.id == suggestionID ? $0 : nil }
-    let onToast = activeSuggestion?.id == suggestionID
-    if onToast {
-      cancelToastExpiry()
-      if feedback != .tellMeMore {
-        takeDown()
-      }
-    }
+    let suggestion = listed ?? shown
     guard feedback.replaces(listed?.feedback) else { return nil }
     switch feedback {
     case .notNow:
@@ -1033,8 +1089,8 @@ final class AppState {
     }
     // The toast is gone, so a note in its place says what the answer did;
     // the Suggestions window says it beside the suggestion instead.
-    if onToast, let suggestion, let line = consequence(of: feedback, for: suggestion) {
-      toast.showNote(line)
+    if shown != nil, let suggestion, let line = consequence(of: feedback, for: suggestion) {
+      showNote(line)
     }
     AppState.log.notice(
       "suggestion \(suggestionID) feedback \(feedback.rawValue, privacy: .public)"
@@ -1091,8 +1147,8 @@ final class AppState {
   func answerActiveSuggestion(_ feedback: SuggestionFeedback) {
     guard let active = activeSuggestion else { return }
     if feedback == .tellMeMore {
-      toast.expand()
-      toast.bringToFront()
+      send(.toast(.expand))
+      send(.toast(.raise))
     }
     respond(to: active.id, with: feedback)
   }
@@ -1108,31 +1164,29 @@ final class AppState {
   }
 
   private func show(_ suggestion: Suggestion, autoExpires: Bool) {
-    if let active = activeSuggestion, active.id == suggestion.id {
-      cancelToastExpiry()
-      toast.bringToFront()
+    let isUp = activeSuggestion?.id == suggestion.id
+    if !isUp {
+      // The one it replaces is answered, and talk-back ended, before this one is up.
+      if let active = activeSuggestion {
+        respond(to: active.id, with: .expired)
+      }
+      cancelTalkBack()
+    }
+    let arrival: ToastFeature.Arrival
+    if autoExpires {
+      // With VoiceOver or Switch Control on, a suggestion waits to be
+      // answered or closed instead of timing out while it is being reached.
+      let waits = AppState.assistiveTechnologyIsRunning
+      arrival = .unasked(expiresAfter: waits ? nil : settings.mentor.toastTimeout)
+    } else {
+      arrival = .asked
+    }
+    send(.toast(.show(suggestion, exchange: exchange(for: suggestion.id), arrival: arrival)))
+    if isUp {
       if !callouts.isVisible {
         placeCallout(for: suggestion)
       }
       return
-    }
-    if let active = activeSuggestion {
-      respond(to: active.id, with: .expired)
-    }
-    cancelToastExpiry()
-    toastHovered = false
-    cancelTalkBack()
-    activeSuggestion = suggestion
-    toast.show(
-      suggestion,
-      expanded: false,
-      exchange: exchange(for: suggestion.id),
-      asked: !autoExpires
-    )
-    // With VoiceOver or Switch Control on, a suggestion waits to be
-    // answered or closed instead of timing out while it is being reached.
-    if autoExpires, !AppState.assistiveTechnologyIsRunning {
-      scheduleToastExpiry(for: suggestion.id, after: settings.mentor.toastTimeout)
     }
     placeCallout(for: suggestion)
   }
@@ -1142,11 +1196,9 @@ final class AppState {
   ///
   /// If the toast was talked to, this is where the exchange ends and a
   /// suggestion held meanwhile may be shown.
-  private func takeDown() {
-    toast.dismiss()
+  private func toastTakenDown() {
     callouts.dismiss()
     stopCalloutWatch()
-    activeSuggestion = nil
     talkedToSuggestionID = nil
     cancelTalkBack()
     endHold()
@@ -1169,62 +1221,15 @@ final class AppState {
     let outcome = TalkBackPress.outcome(
       match: match,
       toastTalkedTo: talkedToSuggestionID == suggestion.id,
-      countdownRemaining: toastCountdown.held
+      countdownRemaining: features.toast.countdown.held
     )
-    toastCountdown.cancel()
     switch outcome {
     case .talkedTo:
       talkedToSuggestionID = suggestion.id
-    case .notAnExchange(let countdown):
+    case .notAnExchange:
       endHold()
-      guard let countdown, activeSuggestion?.id == suggestion.id else { return }
-      if toastHovered {
-        // Held again under the pointer, with what it had.
-        toastCountdown.run(for: countdown, from: clock.date)
-        toastCountdown.hold(at: clock.date)
-      } else {
-        scheduleToastExpiry(for: suggestion.id, after: countdown)
-      }
     }
-  }
-
-  /// The countdown pauses while the pointer is over the toast and resumes
-  /// with the remaining time when it leaves.
-  private func toastHoverChanged(_ hovering: Bool) {
-    toastHovered = hovering
-    guard let active = activeSuggestion, !talkBack.keepsToastUp else { return }
-    if hovering {
-      guard toastCountdown.deadline != nil else { return }
-      toastTask?.cancel()
-      toastCountdown.hold(at: clock.date)
-    } else if let remaining = toastCountdown.held {
-      scheduleToastExpiry(for: active.id, after: remaining)
-    }
-  }
-
-  private func scheduleToastExpiry(for suggestionID: Int64, after timeout: TimeInterval) {
-    // An exchange in progress keeps the toast up; nothing schedules its end.
-    guard !talkBack.keepsToastUp else { return }
-    toastTask?.cancel()
-    toastCountdown.run(for: timeout, from: clock.date)
-    guard let deadline = toastCountdown.deadline else { return }
-    let clock = clock
-    toastTask = Task { [weak self] in
-      try? await clock.sleep(untilDate: deadline)
-      // Still this countdown: not held, cancelled, or run again meanwhile.
-      guard !Task.isCancelled,
-        let self,
-        self.activeSuggestion?.id == suggestionID,
-        self.toastCountdown.deadline == deadline
-      else { return }
-      self.respond(to: suggestionID, with: .expired)
-    }
-  }
-
-  private func cancelToastExpiry() {
-    toastTask?.cancel()
-    toastTask = nil
-    toastCountdown.cancel()
+    send(.toast(.pressEnded(suggestionID: suggestion.id, outcome)))
   }
 
   // MARK: Callouts
@@ -1303,7 +1308,7 @@ final class AppState {
         case .success(let placement):
           if !shown || self.callouts.placement != placement {
             self.callouts.show(placement, kind: NoteKind(suggestion.category))
-            self.toast.bringToFront()
+            self.send(.toast(.raise))
           }
           if self.lastCallout?.status != .shown || self.lastCallout?.suggestionID != suggestion.id
             || self.lastCallout?.placement != placement
@@ -1429,9 +1434,7 @@ final class AppState {
   private func noteCalloutShown(suggestionID: Int64) async {
     guard let mentor else { return }
     guard let updated = await mentor.noteCalloutShown(suggestionID: suggestionID) else { return }
-    if activeSuggestion?.id == suggestionID {
-      activeSuggestion?.calloutShown = updated.calloutShown
-    }
+    send(.toast(.calloutNoted(updated)))
   }
 
   // MARK: Talking back
@@ -1543,7 +1546,7 @@ final class AppState {
   private func setTalkBack(_ state: TalkBackState) {
     let begins = talkBack == .idle && state != .idle
     talkBack = state
-    toast.setTalkBack(state)
+    send(.toast(.talkBackChanged(state)))
     if begins {
       Task { await mentor?.setTalkingBack(true) }
     }
@@ -1569,7 +1572,7 @@ final class AppState {
   private func pushToTalkPressed() {
     guard talkBack.acceptsAQuestion else { return }
     guard settings.hasConsent else {
-      toast.showNote(
+      showNote(
         """
         Athina is not listening: it is not allowed to watch. Choose Allow Watching in the \
         Athina menu.
@@ -1579,11 +1582,11 @@ final class AppState {
       return
     }
     guard activeSuggestion != nil || lastShownSuggestion != nil else {
-      toast.showNote("Nothing to reply to yet: Athina has not made a suggestion.")
+      showNote("Nothing to reply to yet: Athina has not made a suggestion.")
       return
     }
     if case .unavailable(let reason) = speechAvailability {
-      toast.showNote(reason)
+      showNote(reason)
       return
     }
     refreshPermissions()
@@ -1595,7 +1598,7 @@ final class AppState {
       }
       // The system shows its own request only for a permission it has
       // never asked about; otherwise the answer is in System Settings.
-      toast.showNote(
+      showNote(
         asking
           ? """
           Athina needs Microphone and Speech Recognition to hear you. Answer the system's \
@@ -1611,7 +1614,7 @@ final class AppState {
     }
     guard mode.isActive else {
       let reason = mode == .excluded ? "not watching the app in front" : mode.label.lowercased()
-      toast.showNote("Athina is \(reason), so it is not listening.")
+      showNote("Athina is \(reason), so it is not listening.")
       return
     }
     guard let suggestion = suggestionToTalkTo() else { return }
@@ -1624,7 +1627,7 @@ final class AppState {
       AppState.log.error(
         "listening failed to start: \(String(describing: error), privacy: .public)"
       )
-      toast.showNote("Could not start listening: \(error).")
+      showNote("Could not start listening: \(error).")
       return
     }
     AppState.log.notice("listening for suggestion \(suggestion.id)")
@@ -1654,11 +1657,10 @@ final class AppState {
       suggestion = latest
       show(latest, autoExpires: false)
     } else {
-      toast.showNote("Nothing to reply to yet: Athina has not made a suggestion.")
+      showNote("Nothing to reply to yet: Athina has not made a suggestion.")
       return nil
     }
-    toastTask?.cancel()
-    toastCountdown.hold(at: clock.date)
+    send(.toast(.talkBackBegan))
     return suggestion
   }
 
@@ -1749,7 +1751,7 @@ final class AppState {
     settlePress(match, for: suggestion)
     guard let text, let match else {
       lastTranscript = TranscriptRecord(at: clock.date, text: text ?? "", handling: "nothing heard")
-      toast.showNote("Athina did not catch that.")
+      showNote("Athina did not catch that.")
       return
     }
     switch match {
@@ -1760,7 +1762,7 @@ final class AppState {
         handling: "answered: \(feedback.label)"
       )
       AppState.log.notice("transcript answered \(feedback.rawValue, privacy: .public)")
-      if feedback == .tellMeMore { toast.expand() }
+      if feedback == .tellMeMore { send(.toast(.expand)) }
       respond(to: suggestion.id, with: feedback)
       if activeSuggestion?.id == suggestion.id {
         Task { await mentor?.setTalkingBack(true) }
@@ -1780,9 +1782,13 @@ final class AppState {
         talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
       else { return }
       setTalkBack(.idle)
-      toast.setExchange(
-        exchange(for: suggestion.id, including: followUp),
-        provider: settings.mentor.provider
+      send(
+        .toast(
+          .exchangeChanged(
+            exchange(for: suggestion.id, including: followUp),
+            provider: settings.mentor.provider
+          )
+        )
       )
     }
   }
@@ -2081,9 +2087,13 @@ final class AppState {
       show(suggestion, autoExpires: true)
     case .followUp(let followUp):
       if activeSuggestion?.id == followUp.suggestionID {
-        toast.setExchange(
-          exchange(for: followUp.suggestionID, including: followUp),
-          provider: settings.mentor.provider
+        send(
+          .toast(
+            .exchangeChanged(
+              exchange(for: followUp.suggestionID, including: followUp),
+              provider: settings.mentor.provider
+            )
+          )
         )
       }
     case .feedback, .call, .event:

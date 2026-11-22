@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import ComposableArchitecture
 
 /// Tells VoiceOver about a change it would otherwise miss, as the toast, the
@@ -16,6 +17,37 @@ public struct AnnouncerClient: Sendable {
   /// the person just asked.
   public var post:
     @MainActor @Sendable (_ text: String, _ priority: NSAccessibilityPriorityLevel) -> Void
+}
+
+extension AnnouncerClient {
+  /// An effect that announces `text` before the send that returned it
+  /// returns: under a `HostedParent` once the windows have followed that send
+  /// and before the parent acts on it, and with no parent as it starts.
+  ///
+  /// So announcements are heard in the order their actions were sent. An
+  /// `Effect.run` promises no order between two sends, and a `.high` one that
+  /// came late would cut off the `.medium` one meant to follow it.
+  ///
+  /// - Parameters:
+  ///   - text: What VoiceOver says.
+  ///   - priority: `.medium` to queue behind what it is saying, `.high` to
+  ///     interrupt.
+  /// - Returns: The effect, which sends no action.
+  public func announce<Action>(
+    _ text: String,
+    priority: NSAccessibilityPriorityLevel = .medium
+  ) -> Effect<Action> {
+    @Dependency(\.announceOnceFollowed) var announceOnceFollowed
+    return .publisher { [announceOnceFollowed] in
+      Deferred {
+        // A store starts its effects on the main actor.
+        MainActor.assumeIsolated {
+          announceOnceFollowed { post(text, priority) }
+        }
+        return Empty<Action, Never>()
+      }
+    }
+  }
 }
 
 extension AnnouncerClient: TestDependencyKey {
