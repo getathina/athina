@@ -68,7 +68,7 @@ or manual request that lands while one is in flight stays pending, so the next
 capture follows it under the same delays.
 
 A capture reads the fresh accessibility context, grabs the display containing
-the focused window with `SCScreenshotManager` (Athina's own windows excluded,
+the focused window with `SCScreenshotManager` (through the filter below,
 downscaled to `maxFrameDimension`), hashes it, and drops it if the hash is
 within `hashDistanceThreshold` of the previous kept frame **and** neither the
 window nor the focused text changed. Kept frames go through Vision OCR (text
@@ -78,6 +78,16 @@ Because the user can switch apps while the screenshot or OCR is in flight, the
 pipeline asks NSWorkspace for the live frontmost app after each of those steps
 and discards the frame, without OCR or journaling, when that app is not the one
 the frame was captured for or is excluded.
+
+The screenshot's filter names the apps to show, not those to leave out: every
+app with a window, on screen or off, in a list fetched for that capture, less
+the excluded apps and Athina (any copy with its bundle identifier). So an app
+the list does not name cannot be in that screenshot, one that appeared after it
+was fetched included, while a listed app's new windows are, and whatever lies
+behind a window left out shows in its place. Apple documents a filter of this
+kind without the desktop background and Dock, and with the menu bar only on
+request, so `ScreenCapturer` requests the menu bar and fills what nothing
+covers with gray.
 
 ## Journal
 

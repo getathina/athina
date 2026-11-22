@@ -1,6 +1,7 @@
 import Foundation
 
-/// Apps under which Athina never captures, reads text, or journals.
+/// Apps under which Athina never captures, reads text, or journals, and whose
+/// windows it leaves out of every screenshot.
 public enum ExcludedApps {
   /// Common password managers and Keychain Access.
   public static let defaults: [String] = [

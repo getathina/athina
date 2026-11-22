@@ -69,8 +69,12 @@
   itself is decided here from the model's answer, not there.
 - **Excluded apps** (Settings > Privacy) default to Keychain Access, Passwords,
   and common password managers. While one is frontmost Athina captures no frame,
-  reads no window title or element, runs no OCR, and journals only that the app
-  was excluded, so nothing from them can reach any tier.
+  reads no window title or element, runs no OCR, and journals only which app
+  it was. No window an excluded app owns is in any screenshot, in front or
+  not, so none of that window's picture or text is recognized, saved, or sent;
+  the app's name can be sent in the summary of recent events. An app is matched
+  by its bundle identifier, and an exclusion holds from the next screenshot
+  begun.
 - Secure text fields are never read, even in non-excluded apps, so their
   contents never reach any tier.
 - Model calls are journaled as counts (tokens, cost, latency, outcome) with the

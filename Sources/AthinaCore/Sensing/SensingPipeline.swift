@@ -533,7 +533,8 @@ public actor SensingPipeline {
     do {
       frame = try await capturer.capture(
         windowFrame: focus.windowFrame,
-        maxDimension: settings.maxFrameDimension
+        maxDimension: settings.maxFrameDimension,
+        excluding: settings.excludedBundleIDSet
       )
       cadence.lastError = nil
     } catch {
