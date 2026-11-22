@@ -83,6 +83,22 @@ public actor MentorLoop {
   /// Set by the app, not read from the sensing stream, so a withdrawal
   /// holds every call at once rather than when the mode change arrives.
   private var consented: Bool
+  /// Whether the person has paused Athina.
+  ///
+  /// Set by the app as consent is, since the mode change waits in the stream
+  /// behind whatever call is being made.
+  private var paused = false
+  /// Counts each pause, withdrawal and Delete Everything, so work begun
+  /// before one sends nothing after it.
+  private var generation = 0
+  /// When `generation` last changed: a screen captured by then leads to no
+  /// call, however long it waited in the stream.
+  private var workEndedAt: Date?
+  /// When consent was last withdrawn, until the journal is cleared.
+  private var withdrawnAt: Date?
+  /// The screens still waiting in the stream at a withdrawal, which no later
+  /// request's window reads either.
+  private var withheldScreens: Set<Int64> = []
   /// The key last read and the provider it was read for, or nil when none
   /// is saved.
   private var loadedKey: CallRoute?
@@ -233,9 +249,9 @@ public actor MentorLoop {
 
   /// A held suggestion is not shown while the user is pausing Athina.
   ///
-  /// The pause reaches the loop through the sensing stream too, but the app
-  /// calls this first when it ends a hold while pausing, so the held suggestion
-  /// cannot slip out in between.
+  /// The pause reaches the loop through `setPaused` and the sensing stream
+  /// too, but the app calls this first when it ends a hold while pausing, so
+  /// the held suggestion cannot slip out in between.
   public func expireHeldSuggestion(now: Date? = nil) async {
     guard let held = heldSuggestion else { return }
     heldSuggestion = nil
@@ -292,19 +308,55 @@ public actor MentorLoop {
 
   /// Call when the person allows or withdraws consent.
   ///
-  /// A withdrawal holds every call from here on, drops the question waiting
+  /// A withdrawal holds every call from here on, ends the work begun on the
+  /// screen so far, which no later Allow resumes, drops the question waiting
   /// for a call in flight, and expires a suggestion held for a talked-to
   /// toast; a call already on the network cannot be taken back, but its
-  /// suggestion is never shown (`MentorScheduler.publishGate`).
+  /// suggestion is not shown while consent is withdrawn
+  /// (`MentorScheduler.publishGate`).
   public func setConsented(_ granted: Bool) async {
     guard granted != consented else { return }
     consented = granted
     MentorLoop.log.notice("consent \(granted ? "allowed" : "withdrawn", privacy: .public)")
     if !granted {
+      endScreenWork()
+      withdrawnAt = workEndedAt
       dropPendingQuestion()
       await expireHeldSuggestion()
     }
     await publishStatus()
+  }
+
+  /// Call when the person pauses or resumes, without waiting for the sensing
+  /// stream to say so.
+  ///
+  /// A pause holds every call that carries the screen from here on, ends the
+  /// work begun so far, which no resume takes up again, drops the question
+  /// waiting for a call in flight, and expires a held suggestion; a call
+  /// already on the network may finish, but its suggestion is not shown while
+  /// paused. Test Connection still works.
+  public func setPaused(_ paused: Bool) async {
+    guard paused != self.paused else { return }
+    self.paused = paused
+    if paused {
+      endScreenWork()
+      dropPendingQuestion()
+      await expireHeldSuggestion()
+    }
+    await publishStatus()
+  }
+
+  /// Call before Delete Everything deletes anything: nothing begun on the
+  /// screen so far is sent.
+  public func journalWillClear() {
+    endScreenWork()
+  }
+
+  /// Ends the work begun on the screen so far, the screens still waiting in
+  /// the stream included.
+  private func endScreenWork() {
+    generation += 1
+    workEndedAt = clock.date
   }
 
   /// Call after the key is saved or removed in Settings.
@@ -392,7 +444,8 @@ public actor MentorLoop {
     let call = await perform(
       tier: .test,
       request: request,
-      timeout: MentorLoop.testTimeout
+      timeout: MentorLoop.testTimeout,
+      begun: nil
     )
     var record = call.record
     switch call.result {
@@ -427,20 +480,33 @@ public actor MentorLoop {
       status.lastRefreshHold = nil
       await publishStatus()
     case .observation(let observation):
+      let begun = generationOfCapture(observation)
+      if let withdrawnAt, observation.timestamp <= withdrawnAt {
+        withheldScreens.insert(observation.id)
+      }
       await expireUnderstandingIfNeeded(now: clock.date)
       lastActivityAt = observation.timestamp
       if period == nil { await setPeriod(RefreshPeriod(startedAt: observation.timestamp)) }
-      await consider(observation)
+      await consider(observation, begun: begun)
       // After the interactive path, so a mentor call that just refreshed
       // the record leaves nothing for the refresh gate to do, and the
       // context verdict triage just reached is the one the gate sees.
-      await refreshUnderstandingIfDue(after: observation)
+      await refreshUnderstandingIfDue(after: observation, begun: begun)
     case .focusChanged, .event, .cadence:
       break
     }
   }
 
-  private func conditions(now: Date) -> MentorScheduler.Conditions {
+  /// The generation `observation` was captured in: an earlier one than now
+  /// when it was captured by the time work last ended.
+  private func generationOfCapture(_ observation: ActivityObservation) -> Int {
+    guard let workEndedAt, observation.timestamp <= workEndedAt else { return generation }
+    return generation - 1
+  }
+
+  /// What the gates are asked with now, for work begun in generation `begun`,
+  /// or nil for what is no such work.
+  private func conditions(now: Date, begun: Int? = nil) -> MentorScheduler.Conditions {
     spend.prune(now: now)
     return MentorScheduler.Conditions(
       mode: mode,
@@ -448,6 +514,8 @@ public actor MentorLoop {
       hasAPIKey: route != nil,
       callInFlight: !inFlight.isEmpty,
       talkingBack: talkingBack,
+      paused: paused,
+      interrupted: begun.map { $0 != generation } ?? false,
       spendFraction: spend.fraction(now: now),
       cadenceMultiplier: spend.cadenceMultiplier(now: now),
       nextHourStart: SpendMeter.nextHourStart(after: now)
@@ -455,9 +523,13 @@ public actor MentorLoop {
   }
 
   /// The whole loop for one observation: triage gate, triage call, mentor gate, mentor call.
-  private func consider(_ observation: ActivityObservation) async {
+  private func consider(_ observation: ActivityObservation, begun: Int) async {
     var now = clock.date
-    switch scheduler.triageGate(for: observation, conditions: conditions(now: now), now: now) {
+    switch scheduler.triageGate(
+      for: observation,
+      conditions: conditions(now: now, begun: begun),
+      now: now
+    ) {
     case .hold(let hold):
       status.lastGate = MentorStatus.GateRecord(at: now, observationID: observation.id, hold: hold)
       if case .noContextsDeclared = hold {
@@ -469,7 +541,7 @@ public actor MentorLoop {
       status.lastGate = MentorStatus.GateRecord(at: now, observationID: observation.id, hold: nil)
     }
     scheduler.noteTriageStarted(observation: observation, now: now)
-    guard let triaged = await runTriage(observation) else {
+    guard let triaged = await runTriage(observation, begun: begun) else {
       await publishStatus()
       return
     }
@@ -480,7 +552,7 @@ public actor MentorLoop {
     switch scheduler.mentorGate(
       triage: verdict,
       context: placement,
-      conditions: conditions(now: now),
+      conditions: conditions(now: now, begun: begun),
       now: now
     ) {
     case .hold(let hold):
@@ -491,7 +563,7 @@ public actor MentorLoop {
       status.lastMentorHold = nil
     }
     scheduler.noteMentorStarted(now: now)
-    await runMentor(observation, context: placement)
+    await runMentor(observation, context: placement, begun: begun)
     await publishStatus()
   }
 
@@ -527,7 +599,8 @@ public actor MentorLoop {
   /// costs no extra call. Returns the verdict with that placement, or nil when
   /// the call did not produce one.
   private func runTriage(
-    _ observation: ActivityObservation
+    _ observation: ActivityObservation,
+    begun: Int
   ) async -> (TriageVerdict, ContextPlacement)? {
     guard route != nil else { return nil }
     let now = clock.date
@@ -553,7 +626,8 @@ public actor MentorLoop {
     let call = await perform(
       tier: .triage,
       request: request,
-      timeout: MentorLoop.triageTimeout
+      timeout: MentorLoop.triageTimeout,
+      begun: begun
     )
     var record = call.record
     var triaged: (TriageVerdict, ContextPlacement)?
@@ -588,7 +662,11 @@ public actor MentorLoop {
   ///
   /// With a record standing, the window also takes every screen journaled after
   /// the ones its last write read, since the reply rewrites it.
-  private func runMentor(_ observation: ActivityObservation, context: ContextPlacement) async {
+  private func runMentor(
+    _ observation: ActivityObservation,
+    context: ContextPlacement,
+    begun: Int
+  ) async {
     guard route != nil else { return }
     let now = clock.date
     let window = await screens(
@@ -644,7 +722,8 @@ public actor MentorLoop {
     let call = await perform(
       tier: .mentor,
       request: request,
-      timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
+      timeout: MentorLoop.timeout(forReplyOf: request.maxTokens),
+      begun: begun
     )
     let shownAt = clock.date
     var record = call.record
@@ -782,7 +861,7 @@ public actor MentorLoop {
       }
       heldSuggestion = suggestion
       MentorLoop.log.notice("suggestion \(suggestion.id) held while the user talks back")
-    case .expired, .withdrawn:
+    case .expired, .withdrawn, .paused:
       await expireUnseen(suggestion, now: now)
     }
     liftSuggestionFloorIfDecided()
@@ -825,6 +904,7 @@ public actor MentorLoop {
     at now: Date? = nil
   ) async -> FollowUp? {
     let now = now ?? clock.date
+    let begun = generation
     var followUp = FollowUp(
       suggestionID: suggestion.id,
       timestamp: now,
@@ -833,7 +913,7 @@ public actor MentorLoop {
       promptVersion: MentorPrompts.version
     )
     var asking = now
-    var gate = scheduler.followUpGate(conditions: conditions(now: asking))
+    var gate = scheduler.followUpGate(conditions: conditions(now: asking, begun: begun))
     while gate == .wait {
       let record = MentorStatus.PendingFollowUp(
         suggestionID: suggestion.id,
@@ -849,7 +929,7 @@ public actor MentorLoop {
       }
       guard asked else { return nil }
       asking = clock.date
-      gate = scheduler.followUpGate(conditions: conditions(now: asking))
+      gate = scheduler.followUpGate(conditions: conditions(now: asking, begun: begun))
     }
     if case .hold(let hold) = gate {
       followUp.error = hold.label
@@ -885,7 +965,8 @@ public actor MentorLoop {
     let call = await perform(
       tier: .followUp,
       request: request,
-      timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
+      timeout: MentorLoop.timeout(forReplyOf: request.maxTokens),
+      begun: begun
     )
     var record = call.record
     switch call.result {
@@ -1077,7 +1158,8 @@ public actor MentorLoop {
     await publishStatus()
   }
 
-  /// Drops every status record that describes a row Delete Everything deleted.
+  /// Ends the work begun before Delete Everything finished, and drops every
+  /// status record that describes a row it deleted.
   ///
   /// Each is dropped rather than left pointing at a row that is gone: the
   /// triage gate's observation, the last call of each tier, and the mentor
@@ -1085,6 +1167,10 @@ public actor MentorLoop {
   /// stays: the mode, the context verdict, the cadence floors in force, and
   /// the spend already incurred this hour, which still counts against the cap.
   public func journalCleared() async {
+    endScreenWork()
+    // The withheld rows are gone, and the ids start over.
+    withdrawnAt = nil
+    withheldScreens = []
     status.lastGate = nil
     status.lastTriage = nil
     status.lastMentorHold = nil
@@ -1124,11 +1210,14 @@ public actor MentorLoop {
   ///
   /// Every mentor call refreshes the record for free, so this only fires in a
   /// stretch of active use with no mentor call in it.
-  private func refreshUnderstandingIfDue(after observation: ActivityObservation) async {
+  private func refreshUnderstandingIfDue(
+    after observation: ActivityObservation,
+    begun: Int
+  ) async {
     let now = clock.date
     await countActiveUse(now: now)
     let gate = scheduler.refreshGate(
-      conditions: conditions(now: now),
+      conditions: conditions(now: now, begun: begun),
       context: contextPlacement(for: observation),
       period: period,
       lastActivityAt: lastActivityAt,
@@ -1145,14 +1234,14 @@ public actor MentorLoop {
       since = periodStart
     }
     await setPeriod(period?.restarted(at: now))
-    await runRefresh(since: since, now: now)
+    await runRefresh(since: since, now: now, begun: begun)
     await publishStatus()
   }
 
   /// Text only: the record as it stands, recent suggestions and events, and
   /// the screens since it was last written: every one journaled after the
   /// ones its last write read, or those since `since` before it has read any.
-  private func runRefresh(since: Date, now: Date) async {
+  private func runRefresh(since: Date, now: Date, begun: Int) async {
     guard route != nil else { return }
     let cursor = understanding?.coveredThroughObservationID
     let window = await screens(since: cursor == nil ? since : nil, after: cursor, now: now)
@@ -1182,7 +1271,8 @@ public actor MentorLoop {
     let call = await perform(
       tier: .understanding,
       request: request,
-      timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
+      timeout: MentorLoop.timeout(forReplyOf: request.maxTokens),
+      begun: begun
     )
     var record = call.record
     switch call.result {
@@ -1227,7 +1317,7 @@ public actor MentorLoop {
   /// and, with a cursor, only those after it, because the record already covers
   /// the rest; and the highest id read, for the next revision's cursor.
   /// `observation` is the one being considered, added when the journal has not
-  /// stored it.
+  /// stored it. A screen withheld at a withdrawal is read past, never returned.
   private func screens(
     since: Date?,
     after cursor: Int64?,
@@ -1254,6 +1344,7 @@ public actor MentorLoop {
     {
       unread = max(0, total - history.filter(uncovered).count)
     }
+    history.removeAll { withheldScreens.contains($0.id) }
     if let observation, !history.contains(where: { $0.id == observation.id }) {
       history.append(observation)
     }
@@ -1277,14 +1368,18 @@ public actor MentorLoop {
   /// The single path to the network.
   ///
   /// Marks the tier in flight, times the call, and prices its usage; the caller
-  /// sets the outcome. Nothing is sent without consent
-  /// (`MentorScheduler.callGate`), whichever path the call came by and
-  /// whatever its gate saw before an await, and nothing with a key other
-  /// than the one read for the provider the request was built for.
+  /// sets the outcome. `MentorScheduler.callGate` is asked again right before
+  /// the send, whichever path the call came by and whatever its gate saw
+  /// before an await: nothing is sent without consent, and nothing that
+  /// carries the screen while paused or when it was begun, in generation
+  /// `begun`, before the last pause, withdrawal or Delete Everything. Nothing
+  /// is sent with a key other than the one read for the provider the request
+  /// was built for.
   private func perform(
     tier: ModelTier,
     request: MessagesRequest,
-    timeout: TimeInterval
+    timeout: TimeInterval,
+    begun: Int?
   ) async -> CallResult {
     let provider = settings.provider
     inFlight.insert(tier)
@@ -1292,7 +1387,10 @@ public actor MentorLoop {
     let started = clock.date
     let identity = CallIdentity(kind: tier.rawValue, promptVersion: MentorPrompts.version)
     let result: Result<MessagesResponse, ClaudeClientError>
-    if let hold = MentorScheduler.callGate(consented: consented) {
+    if let hold = MentorScheduler.callGate(
+      for: tier,
+      conditions: conditions(now: started, begun: begun)
+    ) {
       result = .failure(.notSent(hold.label))
     } else if let route, route.provider == provider {
       do {

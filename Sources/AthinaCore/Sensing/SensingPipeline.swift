@@ -1,8 +1,10 @@
 import Foundation
+import Synchronization
 
 /// Where the pipeline's senses come from.
 public enum SensingSource: Sendable {
-  /// The Mac itself: focus, input, permissions, and the screen.
+  /// The senses the pipeline was created with, which are the Mac's own unless
+  /// it was given others: focus, input, permissions, and the screen.
   case system
   /// Nothing real, for a hermetic run (`ControlMode.isHermetic`): no focus
   /// tracking, no read of input or permissions, and no capture, so the run
@@ -23,21 +25,29 @@ public enum SensingSource: Sendable {
 /// no input, idle, permission, focus, or capture is read or journaled. Only
 /// retention runs, so what an earlier consent let in still ages out. Settings
 /// that withdraw consent stop all of that at once, a capture in flight included.
+///
+/// A withdrawal, Pause and Delete Everything each end every capture begun
+/// before it (`CaptureGeneration`): such a capture starts no screen capture or
+/// text recognition from then on, and its frame is neither kept in the journal
+/// nor published, whatever follows.
 public actor SensingPipeline {
   /// The sensing settings in effect: those it was created with, until
   /// `updateSettings(_:)` replaces them with validated ones.
   public private(set) var settings: SensingSettings
   private let journal: Journal
-  private let tracker: FocusTracker
+  private let tracker: any FocusTracking
   private let source: SensingSource
-  private let capturer = ScreenCapturer()
-  private let recognizer = TextRecognizer()
+  private let capturer: any ScreenCapturing
+  private let recognizer: any TextRecognizing
+  private let inputActivity: any InputActivityReading
+  private let permissionReader: any PermissionReading
   private let broadcaster = EventBroadcaster<SensingEvent>()
   /// Every date the pipeline stamps and every cadence it waits out.
   private let clock: any AthinaClock
   private let signal: AsyncSignal
 
   private var scheduler: CaptureScheduler
+  private let captures = CaptureGeneration()
   private var loopTask: Task<Void, Never>?
   private var userPaused = false
   private var isIdle = false
@@ -53,8 +63,9 @@ public actor SensingPipeline {
   private var lastPublishedCadence: Date = .distantPast
   private var lastPublishedSnapshot: CadenceStatus?
 
-  /// Creates a stopped pipeline that journals into `journal`, follows focus
-  /// with `tracker`, and stamps and paces everything on `clock`.
+  /// Creates a stopped pipeline over this Mac's senses that journals into
+  /// `journal`, follows focus with `tracker`, and stamps and paces everything
+  /// on `clock`.
   public init(
     settings: SensingSettings,
     journal: Journal,
@@ -62,9 +73,41 @@ public actor SensingPipeline {
     clock: any AthinaClock,
     source: SensingSource = .system
   ) {
+    self.init(
+      settings: settings,
+      journal: journal,
+      capturer: ScreenCapturer(),
+      recognizer: TextRecognizer(),
+      tracker: tracker,
+      input: SystemInputActivity(),
+      permissions: SystemPermissions(),
+      clock: clock,
+      source: source
+    )
+  }
+
+  /// Creates a stopped pipeline over exactly the senses it is given.
+  ///
+  /// None has a default, so a test that passes fakes cannot sense this Mac by
+  /// leaving one out.
+  public init(
+    settings: SensingSettings,
+    journal: Journal,
+    capturer: any ScreenCapturing,
+    recognizer: any TextRecognizing,
+    tracker: any FocusTracking,
+    input: any InputActivityReading,
+    permissions permissionReader: any PermissionReading,
+    clock: any AthinaClock,
+    source: SensingSource
+  ) {
     self.settings = settings
     self.journal = journal
+    self.capturer = capturer
+    self.recognizer = recognizer
     self.tracker = tracker
+    inputActivity = input
+    self.permissionReader = permissionReader
     self.source = source
     if source == .hermetic {
       permissions = PermissionStatus(
@@ -85,6 +128,10 @@ public actor SensingPipeline {
   public func events() async -> AsyncStream<SensingEvent> {
     await broadcaster.subscribe()
   }
+
+  /// What publishes the events, internal so a test can hold a publish in
+  /// flight.
+  var publisher: EventBroadcaster<SensingEvent> { broadcaster }
 
   // MARK: Control
 
@@ -120,9 +167,12 @@ public actor SensingPipeline {
 
   /// Pauses or resumes sensing at the owner's request, journaling a `paused`
   /// or `resumed` event when that changes anything.
+  ///
+  /// A pause ends a capture in flight, even one sensing resumes during.
   public func setPaused(_ paused: Bool) async {
     guard paused != userPaused else { return }
     userPaused = paused
+    if paused { captures.end() }
     await journalEvent(JournalEvent(timestamp: clock.date, kind: paused ? .paused : .resumed))
     await signal.signal()
   }
@@ -133,6 +183,7 @@ public actor SensingPipeline {
     let validated = newSettings.validated()
     let consentChanged = validated.hasConsent != settings.hasConsent
     settings = validated
+    if consentChanged, !validated.hasConsent { captures.end() }
     scheduler.settings = validated
     await tracker.updateExcluded(validated.excludedBundleIDSet)
     if consentChanged, loopTask != nil {
@@ -171,6 +222,7 @@ public actor SensingPipeline {
       )
     }
     let now = clock.date
+    let stands = captures.begin()
     let focus = scripted.focus(at: now, excluded: settings.isExcluded(bundleID: scripted.bundleID))
     let previous = lastFocus
     if previous?.bundleID != focus.bundleID {
@@ -202,9 +254,19 @@ public actor SensingPipeline {
       return .notKept(verdict.reason)
     }
     let frame = CapturedFrame(image: image, displayID: 0, screenRect: ScriptedObservation.display)
-    return .kept(
-      await journalCapture(frame, hash: hash, blocks: blocks, focus: focus, reason: reason, at: now)
+    let kept = await journalCapture(
+      frame,
+      hash: hash,
+      blocks: blocks,
+      focus: focus,
+      reason: reason,
+      at: now,
+      while: stands
     )
+    guard let kept else {
+      return .notKept("sensing was paused, withdrawn or cleared during the capture")
+    }
+    return .kept(kept)
   }
 
   /// Senses input going idle, or coming back, in a hermetic pipeline.
@@ -228,10 +290,13 @@ public actor SensingPipeline {
   /// Deletes everything in the journal, leaving one `journalCleared` event,
   /// and publishes that event.
   ///
-  /// The next frame captured is kept whatever it looks like, since there is
-  /// no earlier frame left to compare it with.
+  /// A capture begun before it finishes is not kept. The next frame captured
+  /// is kept whatever it looks like, since there is no earlier frame left to
+  /// compare it with.
   public func clearJournal() async throws {
+    captures.end()
     try await journal.clear(at: clock.date)
+    captures.end()
     lastKept = nil
     if let cleared = try? await journal.recentEvents(limit: 1).first {
       await broadcaster.send(.event(cleared))
@@ -317,8 +382,8 @@ public actor SensingPipeline {
       // apart in real time, which a replay's faster or moved clock does not change.
       // The counter only says how long ago the last event was, so its time jitters by
       // milliseconds from poll to poll; a new event moves it by far more.
-      let realSecondsSinceInput = InputActivity.secondsSinceLastInput()
-      let inputUptime = ProcessInfo.processInfo.systemUptime - realSecondsSinceInput
+      let realSecondsSinceInput = inputActivity.secondsSinceLastInput()
+      let inputUptime = inputActivity.systemUptime() - realSecondsSinceInput
       // How long ago that was, and the idle threshold, are read on the app's clock.
       let secondsSinceInput = realSecondsSinceInput * clock.rate
       if lastInputUptime.map({ inputUptime - $0 > 0.25 }) ?? true {
@@ -351,7 +416,7 @@ public actor SensingPipeline {
   private func refreshPermissionsIfDue(now: Date) {
     guard now.timeIntervalSince(permissionsCheckedAt) >= 2 else { return }
     permissionsCheckedAt = now
-    let fresh = PermissionProbe.current()
+    let fresh = permissionReader.current()
     if fresh != permissions {
       let hadAny = permissions.anyGranted
       let accessibilityChanged = fresh.accessibility != permissions.accessibility
@@ -449,9 +514,11 @@ public actor SensingPipeline {
   private func performCapture(reason: CaptureReason) async {
     let startedAt = clock.date
     defer { scheduler.noteCaptureFinished(startedAt: startedAt, at: clock.date) }
+    let stands = captures.begin()
 
     let focus: FocusContext
     if let fresh = await tracker.readCurrent() {
+      guard stands() else { return }
       focus = fresh
       lastFocus = fresh
       await broadcaster.send(.focusChanged(fresh))
@@ -460,7 +527,7 @@ public actor SensingPipeline {
     } else {
       return
     }
-    guard !focus.isExcluded else { return }
+    guard !focus.isExcluded, stands() else { return }
 
     let frame: CapturedFrame
     do {
@@ -477,7 +544,7 @@ public actor SensingPipeline {
     // The user may have switched apps, possibly to an excluded one, while the
     // screenshot was in flight. `lastFocus` lags behind the activation
     // notification, so the live frontmost app is checked as well.
-    guard lastFocus?.isExcluded != true, await frontmostIsStill(focus) else { return }
+    guard await mayGoOn(with: focus, while: stands) else { return }
 
     guard let hash = FrameImaging.perceptualHash(of: frame.image) else {
       cadence.lastError = "capture: could not hash frame"
@@ -497,18 +564,16 @@ public actor SensingPipeline {
       cadence.lastError = "ocr: \(error)"
     }
     // Checked again here: OCR can take hundreds of milliseconds, and this is
-    // the last point before the frame and its text become durable. Consent
-    // withdrawn meanwhile discards it too.
-    guard settings.hasConsent, lastFocus?.isExcluded != true, await frontmostIsStill(focus) else {
-      return
-    }
+    // the last point before the frame and its text head for the journal.
+    guard await mayGoOn(with: focus, while: stands) else { return }
     await journalCapture(
       frame,
       hash: hash,
       blocks: blocks,
       focus: focus,
       reason: reason,
-      at: startedAt
+      at: startedAt,
+      while: stands
     )
   }
 
@@ -522,7 +587,12 @@ public actor SensingPipeline {
     )
   }
 
-  /// Journals a kept frame and the text read from it, and publishes it.
+  /// Journals a kept frame and the text read from it, and publishes it, while
+  /// the capture stands.
+  ///
+  /// Returns nil when it stopped standing first, leaving nothing of it behind:
+  /// the journal and the broadcaster each ask as they act, and a row written
+  /// just before is taken out again.
   @discardableResult
   private func journalCapture(
     _ frame: CapturedFrame,
@@ -530,8 +600,9 @@ public actor SensingPipeline {
     blocks: [TextBlock],
     focus: FocusContext,
     reason: CaptureReason,
-    at startedAt: Date
-  ) async -> ActivityObservation {
+    at startedAt: Date,
+    while stands: @Sendable () -> Bool
+  ) async -> ActivityObservation? {
     let jpeg = FrameImaging.jpegData(from: frame.image, quality: settings.thumbnailJPEGQuality)
     let info = FrameInfo(
       hash: hash,
@@ -549,16 +620,37 @@ public actor SensingPipeline {
       reason: reason
     )
     do {
-      observation = try await journal.record(observation)
+      guard let stored = try await journal.record(observation, while: stands) else { return nil }
+      observation = stored
     } catch {
       cadence.lastError = "journal: \(error)"
     }
-    lastKept = (hash, focus.windowSignature, focus.textSignature)
+    guard await broadcaster.send(.observation(observation), while: stands) else {
+      do {
+        try await journal.discard(observation)
+      } catch {
+        cadence.lastError = "journal: \(error)"
+      }
+      return nil
+    }
+    // A clear since it was published leaves nothing to compare the next frame with.
+    if stands() { lastKept = (hash, focus.windowSignature, focus.textSignature) }
     cadence.keptCount += 1
     cadence.lastCaptureAt = startedAt
     cadence.lastCaptureReason = reason
-    await broadcaster.send(.observation(observation))
     return observation
+  }
+
+  /// Whether a capture of `focus` may take its next step: it stands, and
+  /// still does once the app in front has been read and is unchanged.
+  private func mayGoOn(
+    with focus: FocusContext,
+    while stands: @Sendable () -> Bool
+  ) async -> Bool {
+    guard stands(), lastFocus?.isExcluded != true, await frontmostIsStill(focus) else {
+      return false
+    }
+    return stands()
   }
 
   private func frontmostIsStill(_ focus: FocusContext) async -> Bool {
@@ -574,5 +666,25 @@ public actor SensingPipeline {
       cadence.lastError = "journal: \(error)"
     }
     await broadcaster.send(.event(stored))
+  }
+}
+
+/// Tells a capture begun before Pause, a withdrawal or Delete Everything from
+/// one begun after it.
+///
+/// It is read from any actor, so the journal and the broadcaster can ask at
+/// the moment they act rather than when they were called.
+private final class CaptureGeneration: Sendable {
+  private let generation = Atomic(0)
+
+  /// Ends every capture begun so far, for good.
+  func end() {
+    generation.wrappingAdd(1, ordering: .sequentiallyConsistent)
+  }
+
+  /// Returns a check of whether a capture begun now still stands.
+  func begin() -> @Sendable () -> Bool {
+    let begun = generation.load(ordering: .sequentiallyConsistent)
+    return { self.generation.load(ordering: .sequentiallyConsistent) == begun }
   }
 }

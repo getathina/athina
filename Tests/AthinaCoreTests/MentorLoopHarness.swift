@@ -81,6 +81,10 @@ struct MentorLoopHarness<Client: ClaudeClient>: MentorHarness {
     await loop.setConsented(granted)
   }
 
+  func setPaused(_ paused: Bool) async {
+    await loop.setPaused(paused)
+  }
+
   func apiKeyChanged() async {
     await loop.apiKeyChanged()
   }
@@ -123,6 +127,10 @@ struct MentorLoopHarness<Client: ClaudeClient>: MentorHarness {
 
   func resetUnderstanding(at now: Date?) async {
     await loop.resetUnderstanding(at: now)
+  }
+
+  func journalWillClear() async {
+    await loop.journalWillClear()
   }
 
   func journalCleared() async {

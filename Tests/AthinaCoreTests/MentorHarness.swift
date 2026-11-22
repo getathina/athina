@@ -46,6 +46,7 @@ protocol MentorHarness<Client>: Sendable {
   var hasAPIKey: Bool { get async }
   func updateSettings(_ settings: MentorSettings) async
   func setConsented(_ granted: Bool) async
+  func setPaused(_ paused: Bool) async
   func apiKeyChanged() async
   func testConnection() async -> Result<String, ClaudeClientError>
   func setTalkingBack(_ active: Bool, at now: Date?) async
@@ -59,6 +60,7 @@ protocol MentorHarness<Client>: Sendable {
   ) async -> Suggestion?
   func noteCalloutShown(suggestionID: Int64) async -> Suggestion?
   func resetUnderstanding(at now: Date?) async
+  func journalWillClear() async
   func journalCleared() async
 }
 

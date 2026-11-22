@@ -314,6 +314,29 @@ public actor Journal {
     return stored
   }
 
+  /// Stores the observation if `stands` holds when the journal comes to it.
+  ///
+  /// Returns it with its new id, or nil when nothing was stored.
+  func record(
+    _ observation: ActivityObservation,
+    while stands: @Sendable () -> Bool
+  ) throws -> ActivityObservation? {
+    guard stands() else { return nil }
+    return try record(observation)
+  }
+
+  /// Deletes an observation that was never published, and its thumbnail.
+  ///
+  /// The timestamp is matched too, since a clear starts the ids over.
+  func discard(_ observation: ActivityObservation) throws {
+    try db.write { db in
+      try db.execute(
+        sql: "DELETE FROM observations WHERE id = ? AND timestamp = ?",
+        arguments: [observation.id, observation.timestamp.timeIntervalSince1970]
+      )
+    }
+  }
+
   /// Stores an event.
   ///
   /// Returns it with its new id.

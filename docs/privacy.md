@@ -87,16 +87,22 @@
   settings, and starts from the live settings (or a `--settings` file it never
   writes), so excluded apps stay excluded while replaying.
 - **Committed fixtures** carry only staged, synthetic screen content, recorded
-  for the purpose, never the captain's or any user's real work. Every recording
+  for the purpose, never a maintainer's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
 - **Pause** from the menu or with the global hotkey (⌃⌥⌘P unless changed or
-  cleared) stops all sensing; the eyes in the menu bar shut to a line. Idle
+  cleared) stops screen capture and every request that carries the screen at
+  once: the frame of a capture in flight is neither kept nor sent, even if
+  watching resumes meanwhile, and a screen waiting behind a call starts no
+  call of its own. A call already on the network may finish, but its
+  suggestion is not shown while paused, and Test Connection, which carries no
+  screen, still works. The eyes in the menu bar shut to a line. Idle
   closes them in a curve, asleep, an excluded app makes them look away,
   missing permissions leaves them open and empty, and a held mentor tier
   half-lids them (see [Design conventions](design.md)).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
-  at any time. A replay senses the real screen too, and a finished replay's
+  at any time: Delete Everything also drops the frame of a capture in flight
+  and any screen waiting to be sent. A replay senses the real screen too, and a finished replay's
   journal is never opened again, so nothing can age it in place: the next
   replay launch removes its whole per-launch directory instead, once that
   directory has gone unwritten for longer than the thumbnail window (see
@@ -161,10 +167,12 @@ talking back says it is not listening.
 
 Settings > Privacy shows the answer for the provider in force and when it was
 given. Withdraw Consent withdraws it for every provider, so no later switch
-resumes under an earlier Allow, and stops capturing and calling at once: the pipeline stops tracking focus and
-drops a capture in flight before it is journaled, the loop drops a waiting
-question and takes down the toast and callout, and a call already on the
-network finishes but its suggestion is never shown. What the journal already
+resumes under an earlier Allow, and stops capturing and calling at once: the pipeline stops tracking focus,
+starts no screen capture or text recognition, and neither keeps nor publishes
+the frame of a capture in flight; the loop drops a waiting question and any
+screen waiting to be sent, and takes down the toast and callout; and a call
+already on the network finishes, but its suggestion is not shown while consent
+is withdrawn. Allowing again takes up none of what was dropped. What the journal already
 holds stays until it expires or is cleared. Review and Allow… opens the consent
 page again. Both the consent page and Settings > Privacy link to the privacy
 policy, this document on the repository's main branch

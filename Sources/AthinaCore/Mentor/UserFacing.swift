@@ -46,6 +46,8 @@ public enum UserFacing {
       "Athina did not ask: there is no API key. Add one in Models settings."
     case .paused:
       "Athina did not ask: it is paused."
+    case .interrupted:
+      "Athina did not ask: watching stopped or the journal was cleared meanwhile. Ask again."
     case .idle:
       "Athina did not ask: it is idle."
     case .excludedApp:
@@ -121,8 +123,8 @@ public enum UserFacing {
   /// What `Hold.label` writes for each hold with nothing varying in it.
   private static let holdsByLabel: [String: MentorScheduler.Hold] = Dictionary(
     uniqueKeysWithValues: [
-      MentorScheduler.Hold.noConsent, .disabled, .noAPIKey, .paused, .idle, .excludedApp,
-      .waitingForPermissions, .notSensing, .callInFlight, .noContextsDeclared,
+      MentorScheduler.Hold.noConsent, .disabled, .noAPIKey, .paused, .interrupted, .idle,
+      .excludedApp, .waitingForPermissions, .notSensing, .callInFlight, .noContextsDeclared,
     ].map { ($0.label, $0) }
   )
 
