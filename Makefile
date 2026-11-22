@@ -80,7 +80,7 @@ snapshots-smoke: ## CI's snapshots-smoke check reproduced; drifts on a Mac unlik
 	@scripts/snapshots.sh smoke $(SHARD)
 ##= SHARD=<k>/<n> only the screenshots CI's shard k of n draws
 
-test-e2e-tart: ## both e2e tiers in a throwaway Tart VM, not on this screen; first pulls 82 GB
+test-e2e-tart: ## both e2e tiers in a throwaway Tart VM, not on this screen; first pulls 69 GB
 	@scripts/e2e/tart.sh
 
 icons: ## redraw the app icon, menu bar mark and README icon from Resources/Mark

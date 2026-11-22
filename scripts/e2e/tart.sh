@@ -23,10 +23,12 @@
 # one install is bash 4, inside the VM, when the image has none.
 set -euo pipefail
 
-# cirruslabs/macos-golden-gate-xcode, tag 27.1. The sizes are its manifest's:
-# 82.3 GB to download, 96.8 GB on disk.
-IMAGE="ghcr.io/cirruslabs/macos-golden-gate-xcode@sha256:9ae66619fed9abc4740efefc0e2f6ac9440560095c79fa1ebe2b95d89d9b61b9"
-IMAGE_GB=97
+# cirruslabs/macos-tahoe-xcode, tag 27.1: a macOS 26 guest with Xcode 27.1, so
+# a run here proves macOS 26, not 27. The sizes are its manifest's: 69.1 GB to
+# download and a 140 GB disk, which takes up to that much, so all of it is
+# asked for.
+IMAGE="ghcr.io/cirruslabs/macos-tahoe-xcode@sha256:2e0dce09b0e0f18a1666c399a9bd333dbab38fad3fd40dd280aaad4be925c9d7"
+IMAGE_GB=140
 # What a run writes to its copy-on-write clone (builds, caches, swap), with room
 # left over for this Mac.
 RUN_GB=30

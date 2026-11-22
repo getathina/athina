@@ -55,7 +55,7 @@ make format                  # formats every Swift file in place to Google's Swi
 make run-live SPEND=1        # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits, up to the spend cap it prints first; refused without SPEND=1)
 make record SPEND=1          # the same, writing every model call to a fixture file (spends API credits; refused without SPEND=1)
 make snapshots-smoke         # the UI smoke test as CI runs it, compared with the runner's references, which a Mac unlike the runner drifts from
-make test-e2e-tart           # runs both end-to-end tiers on HEAD inside a disposable Tart VM, never on this Mac's screen, and only when asked for (needs Tart and, the first time, 127 GB free; see scripts/e2e/tart.sh)
+make test-e2e-tart           # runs both end-to-end tiers on HEAD inside a disposable macOS 26 Tart VM, never on this Mac's screen, and only when asked for (needs Tart and, the first time, 170 GB free for a 69.1 GB download that takes up to 140 GB on disk; see scripts/e2e/tart.sh)
 make icons                   # rebuilds the app icon and the README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaGaze.svg (their outputs are committed, so a plain build never needs it)
 make demo                    # records a demo GIF of the real screen replaying the committed fixtures into build/demo.gif, not committed (takes the screen; see docs/replay.md)
 make measure                 # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
