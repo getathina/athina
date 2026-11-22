@@ -26,7 +26,8 @@ scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
 Every run is replay only: no API key is read, no network is reachable inside
 the sandbox, and nothing is billed. The real-screen tier needs a person's
 screen and runs only on a Mac; CI's `test-e2e` job runs every API-tier scenario
-on the runner, and compares their checkpoints with approved baselines (see
+on the runner, and compares their checkpoints with approved baselines, except
+below a [stack's top](ci.md#stacked-pull-requests) (see
 [Checkpoints](ci.md#checkpoints)), and CI runs the harness's unit tests with the rest of the suite.
 `ATHINA_E2E_APP=<bundle>` runs the scenarios against another bundle than
 `build/Athina.app`, such as the hardened release build (see [Releasing](releasing.md)), which

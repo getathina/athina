@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Prints true when a change touches only documentation that nothing builds,
-# tests or runs, and false otherwise, which CI's changes job asks of every pull
-# request to skip test, test-e2e, snapshots-smoke and the snapshots shards on
-# one that cannot change a test result or a pixel
-# (docs/ci.md "Docs-only pull requests").
+# tests or runs, and false otherwise, which CI's changes job asks of each pull
+# request that scripts/stack-checks.sh allows (none in a stack) to skip test,
+# test-e2e, snapshots-smoke and the snapshots shards on one that cannot change
+# a test result or a pixel (docs/ci.md "Docs-only pull requests").
 #
 # Documentation is a Markdown file at the top of the repository or anything
 # under docs/, except what a test, script or build step reads, which counts as

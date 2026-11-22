@@ -19,9 +19,12 @@ name: Snapshots
 # would not count: its check runs are on the commit, but a pull request's
 # required checks ignore them.
 #
-# A pull request that touches only documentation renders nothing: the changes
-# job decides, as ci.yml's does, the shards and the drift comment are skipped,
-# and snapshots passes (docs/ci.md "Docs-only pull requests").
+# A pull request into main, outside a stack, that touches only documentation
+# renders nothing: the changes job decides, as ci.yml's does, the shards and
+# the drift comment are skipped, and snapshots passes (docs/ci.md "Docs-only
+# pull requests"). Nor does one that is ready but below the top of its stack:
+# the shards and the comment are skipped and snapshots passes, saying why
+# (docs/ci.md "Stacked pull requests").
 on:
   push:
     branches: [main]
@@ -39,19 +42,29 @@ concurrency:
 jobs:
   changes:
     # Whether this pull request touches only documentation nothing builds,
-    # tests or runs (scripts/docs-only.sh), as in ci.yml, where the job is
-    # described. Should it fail, the shards see no answer and run.
+    # tests or runs (scripts/docs-only.sh), and whether a stack lets this run
+    # skip the screenshot tests (scripts/stack-checks.sh), as in ci.yml, where
+    # the job is described. Should it fail, the shards see no answer and run.
     runs-on: ubuntu-latest
     outputs:
       docs-only: ${{ steps.classify.outputs.docs-only || 'false' }}
+      screenshots: ${{ steps.stack.outputs.screenshots || 'run' }}
+      screenshots-reason: ${{ steps.stack.outputs.reason }}
     steps:
       - uses: actions/checkout@v7
         if: github.event_name == 'pull_request'
         with:
           fetch-depth: 2
+      - name: Read the pull request's place in its stack
+        id: stack
+        if: github.event_name == 'pull_request'
+        run: |
+          decision="$(scripts/stack-checks.sh "$GITHUB_EVENT_NAME" "$GITHUB_RUN_ATTEMPT" "$GITHUB_EVENT_PATH")"
+          echo "$decision"
+          echo "$decision" >> "$GITHUB_OUTPUT"
       - name: Classify the change
         id: classify
-        if: github.event_name == 'pull_request'
+        if: steps.stack.outputs.docs-only-allowed == 'true'
         run: |
           docs_only="$(scripts/docs-only.sh HEAD^1 HEAD)"
           echo "Docs-only: $docs_only"
@@ -62,15 +75,16 @@ jobs:
     # snapshots SnapshotShard (Sources/SnapshotDiff) gives it. The approved
     # renders in Tests/Snapshots were made on this image with the Xcode that
     # .xcode-version pins, so a change to either is a deliberate baseline
-    # refresh (docs/ci.md "UI snapshot baselines"). This condition's draft
-    # part and the one in snapshots' step are the same and change together; a
-    # docs-only pull request skips the shards alone, and a push to main and a
-    # merge queue group always run the full gate.
+    # refresh (docs/ci.md "UI snapshot baselines"). This condition's draft and
+    # stack parts and the ones in snapshots' step are the same and change
+    # together; a docs-only pull request skips the shards alone, and a push to
+    # main and a merge queue group always run the full gate.
     name: snapshots (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: changes
     if: >-
       !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
       && needs.changes.outputs.docs-only != 'true'
+      && !(needs.changes.result == 'success' && needs.changes.outputs.screenshots == 'skip' && github.run_attempt == 1)
     strategy:
       # Every shard runs to the end, so one drift never hides another's.
       fail-fast: false
@@ -122,9 +136,10 @@ jobs:
 
   snapshots:
     # The one check the main ruleset requires: passes only when every shard
-    # ran and passed, when the changes job found a docs-only pull request and
-    # the shards were skipped for it, or on a draft, whose job summary says the
-    # gate was skipped until the pull request is ready for review.
+    # ran and passed, when the changes job found a docs-only pull request or a
+    # layer below the top of its stack and the shards were skipped for it, or
+    # on a draft, whose job summary says the gate was skipped until the pull
+    # request is ready for review.
     needs: [changes, snapshots-shard]
     if: always()
     runs-on: ubuntu-latest
@@ -133,10 +148,13 @@ jobs:
         env:
           DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft }}
           DOCS_ONLY: ${{ needs.changes.outputs.docs-only }}
+          SKIP_SCREENSHOTS: ${{ needs.changes.result == 'success' && needs.changes.outputs.screenshots == 'skip' && github.run_attempt == 1 }}
+          SKIP_REASON: ${{ needs.changes.outputs.screenshots-reason }}
           SHARDS: ${{ needs.snapshots-shard.result }}
         run: |
           echo "Draft: $DRAFT"
           echo "Docs-only: $DOCS_ONLY"
+          echo "Below the top of a stack: $SKIP_SCREENSHOTS"
           echo "The shards: $SHARDS"
           if [ "$DRAFT" = true ]; then
             echo "Skipped: this pull request is a draft, so no snapshot was rendered. Mark it ready for review to run the full snapshot gate." | tee -a "$GITHUB_STEP_SUMMARY"
@@ -144,6 +162,10 @@ jobs:
           fi
           if [ "$DOCS_ONLY" = true ] && [ "$SHARDS" = skipped ]; then
             echo "Only documentation changed, so there is nothing to render."
+            exit 0
+          fi
+          if [ "$SKIP_SCREENSHOTS" = true ] && [ "$SHARDS" = skipped ]; then
+            echo "Skipped: $SKIP_REASON, so no snapshot was rendered. To render them on this commit, re-run all jobs." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           [ "$SHARDS" = success ]
@@ -165,6 +187,7 @@ jobs:
       !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.draft
       && github.event.pull_request.head.repo.full_name == github.repository
       && needs.changes.outputs.docs-only != 'true'
+      && needs.snapshots-shard.result != 'skipped'
     runs-on: ubuntu-latest
     permissions:
       contents: write

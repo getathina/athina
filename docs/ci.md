@@ -56,8 +56,10 @@ pull request, the fast lane, `test`, `lint`, `test-e2e` and
 or not, and the slow `snapshots` (`.github/workflows/snapshots.yml`)
 runs only while the pull request is ready for review: marking a draft ready
 runs it, and so does every push while it is ready, and a pull request opened
-ready runs it at once. A draft never renders it, so the four runners it takes
-stay free for the fast lane while a change is still moving. A pull request
+ready runs it at once. A draft's own runs never render it, so the four runners
+it takes stay free for the fast lane while a change is still moving. In a
+stack only the top pull request runs the screenshot tests (see [Stacked pull
+requests](#stacked-pull-requests)). A pull request
 goes through it in these steps, whoever opens it:
 
 1. Open it as a draft. The no-mistakes pipeline does, since
@@ -77,8 +79,9 @@ goes through it in these steps, whoever opens it:
    queue runs every required check once more on it merged with main and everything
    queued ahead of it, then squashes it onto main; nobody merges by hand.
 
-Only the pull request's draft state decides: editing it, labelling it or
-changing its title starts and cancels nothing.
+Only the pull request's draft state and its place in a stack decide: editing
+it, labelling it, changing its title or linking it into a stack starts and
+cancels nothing.
 
 All five, and `pr-title` (see "The pull request title", below), must pass at
 a pull request's head before it can enter the merge queue, and again in its
@@ -90,7 +93,7 @@ the same head, whose `snapshots` replaces the draft's, and the merge queue
 runs the full gate again on its group whatever the head reported. A
 `workflow_dispatch` run of the same job does not count: its checks are on the
 commit, but a pull request's required checks ignore them. A pull request
-that touches only documentation runs `lint` and `pr-title` alone and skips the other four on
+into main, outside a stack, that touches only documentation runs `lint` and `pr-title` alone and skips the other four on
 purpose, with the names they are required under (see [Docs-only pull
 requests](#docs-only-pull-requests)).
 
@@ -243,8 +246,8 @@ failing check says what to run:
 | --- | --- | --- |
 | `test` | `make test` | the same |
 | `lint` | `make lint` | the same, then the ruleset check above |
-| `test-e2e` | `make test-e2e`, the end-to-end scenarios | the API tier twice, its checkpoints compared with their baselines (see [Checkpoints](#checkpoints)) |
-| `snapshots-smoke` | `make snapshots-smoke` | the same |
+| `test-e2e` | `make test-e2e`, the end-to-end scenarios | the API tier twice, its checkpoints compared with their baselines (see [Checkpoints](#checkpoints)); below a stack's top, once and compared with nothing |
+| `snapshots-smoke` | `make snapshots-smoke` | the same; below a stack's top, nothing |
 | `snapshots` | `make snapshots`, the smoke set drawn at HEAD and at main | the full-fidelity gate on four runners, `snapshots (1/4)` to `snapshots (4/4)`, rolled up into `snapshots` (see [UI snapshot baselines](#ui-snapshot-baselines)) |
 | `pr-title` | none | the pull request title (see "The pull request title", above) |
 
@@ -253,10 +256,83 @@ failing check says what to run:
 `.github/workflows/ci.yml` holds the others but `pr-title`, which is in
 `.github/workflows/pr-title.yml`.
 
+## Stacked pull requests
+
+In a [stack](https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/optimizing-ci-for-stacked-pull-requests),
+only the top pull request runs the screenshot tests: `snapshots`,
+`snapshots-smoke` and the comparison of `test-e2e`'s checkpoints. Every layer
+runs `test`, `lint`, `pr-title` and the scenarios of `test-e2e`. Below the top,
+`test-e2e` runs the scenarios once and publishes no checkpoints, and the other
+two pass without taking a macOS runner. All six checks report under their
+required names, and each of those three says in its job summary what it
+skipped and why.
+
+**Every future stack gets this with nothing to set.** The rule is permanent
+and reads nothing of a stack but a pull request's position and the stack's
+size: no stack or pull request number and no branch name, so there is nothing
+to add for a new stack or to remove after one. A pull request's workflows come
+from its merge ref, which holds its trunk, every layer below it and its own
+change, so every stack on a trunk that has these workflows follows the rule,
+whenever its branches were cut. Open the layers as drafts, each based on the
+branch below it, link them bottom to top, and only then push or mark them
+ready:
+
+```sh
+gh api -X POST repos/getathina/athina/stacks -F 'pull_requests[]=<bottom>' -F 'pull_requests[]=<next>'
+```
+
+A layer added later is linked with the same fields, for it alone, to
+`repos/getathina/athina/stacks/<stack>/add`.
+
+**What decides.** The `changes` job of each workflow gives the event's payload
+to `scripts/stack-checks.sh`, whose rules `StackChecksTests` checks. It skips
+only when the payload has the pull request's stack and its `position` is below
+the stack's `size`. Everything else runs everything: no stack, one that cannot
+be read or does not add up, the top, a push to main and a merge queue's group.
+A `changes` job that failed, was cancelled or gave no answer never counts as
+a skip, and `snapshots` passes as one only if its shards were skipped.
+
+The payload is the stack as it stood when the event fired, so:
+
+- **Linking starts nothing.** `stacked` is a webhook action but no activity an
+  Actions `pull_request` trigger takes. A run from before linking has no stack
+  and runs everything, and its results stand until the next push, or for
+  `snapshots` the next push or marking ready.
+- **A rerun skips nothing it re-runs.** It replays the first attempt's payload,
+  so it proves no position and never skips. To run or approve the screenshots
+  of a layer below the top, mark it ready, then re-run all jobs of the newest
+  CI run and the newest Snapshots run (`gh run rerun <run id>`): all, since
+  re-running only some leaves the skipped shards skipped, and the newest,
+  since a draft's Snapshots run replays as a draft's.
+- **Positions never renumber.** `position` and `size` still count the layers
+  that merged or closed. After lower layers merge the top is still the top and
+  the rest are still below it.
+- **The top changes unannounced.** An added top has what it ran before it was
+  linked, which was everything, and the old top keeps its results until its
+  next push, when it skips. Closing the top leaves the layer under it reading
+  as below, even after a push, so either re-run all its jobs as above or
+  dissolve the stack, link what remains and push.
+
+**A skip never lands untested.** A green skip can outlive the layer's place in
+the stack, and it lets that layer into the merge queue, no further. The queue
+is the only way onto main, with no bypass, gives each layer a run of its own,
+and that run skips nothing. Drift that a higher layer hid shows there, and is
+fixed in the layer that caused it. Taking the queue out of the ruleset, or
+skipping inside it, would end this guarantee.
+
+A linked layer is never docs-only. Its merge ref's first parent is the layer
+below merged, so the diff is that layer's alone, and a top that changes only
+documentation would otherwise skip the screenshots of the whole stack. For the
+same reason a pull request based on a branch other than main, which may be a
+layer not linked yet, is never docs-only. Drafts are as elsewhere: no run that
+started on a draft renders `snapshots`, the top included, and a rerun of one
+that started ready still renders. Each layer is a pull request with concurrency
+groups of its own, so a push to one cancels only its own runs.
+
 ## Docs-only pull requests
 
-A pull request that changes only documentation cannot change a test result
-or a pixel, so it runs `lint`, whose `make lint` checks its links, and
+A pull request into main, outside a stack, that changes only documentation
+cannot change a test result or a pixel, so it runs `lint`, whose `make lint` checks its links, and
 `pr-title`, and nothing that builds: `test`, `test-e2e`,
 `snapshots-smoke` and the four `snapshots` shards are skipped, and the
 `snapshots` roll-up passes without them. It gets every required check in a
@@ -272,14 +348,16 @@ everything; nothing is skipped part of the way. `scripts/docs-only.sh` holds
 these rules and `DocsOnlyTests` checks them, so a new doc that something
 reads goes into its `case` in the same change.
 
-A first job in each workflow, `changes`, asks `scripts/docs-only.sh` about
+A first job in each workflow, `changes`, when `scripts/stack-checks.sh` allows
+it (see [Stacked pull requests](#stacked-pull-requests)), asks `scripts/docs-only.sh` about
 the diff between the pull request's merge commit and its base, its first
 parent, and the jobs above read its answer in their `if`. The skip is a job's,
 never the workflow's: `paths-ignore` on a workflow would leave the required
 checks never reported, so the pull request would wait for them for ever. A
 skipped job still reports a check run under its own name, and a skipped
 required check counts as passed; the `snapshots` roll-up, which fails on
-skipped shards otherwise, passes when `changes` says docs-only. When `changes`
+skipped shards otherwise, passes when `changes` says docs-only or below a
+stack's top. When `changes`
 itself fails, the jobs get no answer and run, and only a `pull_request` event
 is ever docs-only: pushes to main, the nightly run, releases and a merge
 queue's `merge_group` run everything. A draft is still a draft: its
@@ -378,7 +456,8 @@ where it was made:
 
 **Approving an intended change.** Push the change to a pull request ready
 for review (see [Continuous integration](#continuous-integration)), and let `snapshots`
-fail on the drift, look at the drift comment or the report, then run `make snapshots-approve` (see
+fail on the drift (below a stack's top, once re-run: see [Stacked pull
+requests](#stacked-pull-requests)), look at the drift comment or the report, then run `make snapshots-approve` (see
 [Continuous integration](#continuous-integration); `scripts/snapshots.sh baselines-approve [<run id>]`
 takes these alone), which downloads the renders of all four
 shards of HEAD's newest snapshots.yml run, the `snapshots-shard-<k>`
@@ -413,7 +492,8 @@ which would add a download quota and an extra step to every checkout.
 ## UI snapshot smoke test
 
 `snapshots-smoke` is the fast UI check, run on every push to a pull request
-and to main. `make snapshots-smoke` (`scripts/snapshots.sh smoke`) runs
+and to main, except below a stack's top (see [Stacked pull
+requests](#stacked-pull-requests)). `make snapshots-smoke` (`scripts/snapshots.sh smoke`) runs
 the `UISnapshotsSmokeTests` target, which draws every snapshot `--snapshot`
 renders, from the same list (`Snapshots.specs()`) and the same sample data,
 light and dark, in the same kind of window, settled by the same rule, and
@@ -538,7 +618,8 @@ baseline in `Tests/Checkpoints/<scenario>/`, by the rule and in the report
 `snapshots` uses (see [UI snapshot baselines](#ui-snapshot-baselines)): a changed, new or removed
 checkpoint fails until approved. The job, from a clean runner to the answer,
 takes about four minutes with the build cache, so it runs on every push to a
-pull request. On the runner, whose display is 1024 by 768, it hides the Dock
+pull request, comparing nothing below a stack's top (see [Stacked pull
+requests](#stacked-pull-requests)). On the runner, whose display is 1024 by 768, it hides the Dock
 first, through System Events: with it showing, the tallest Settings panes are taller than the room
 left, macOS cuts the Settings window off above their end, and their last rows
 cannot be scrolled into view.
