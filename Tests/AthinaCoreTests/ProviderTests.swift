@@ -481,10 +481,10 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     settings.provider = .openAI
     let h = try await Harness(settings: settings, key: "sk-ant-unused")
     // Anthropic's key is no key for OpenAI.
-    #expect(await h.loop.currentStatus().availability == .noAPIKey)
+    #expect(await h.currentStatus().availability == .noAPIKey)
     try h.keyStore.save("sk-openai", for: .openAI)
-    await h.loop.apiKeyChanged()
-    #expect(await h.loop.currentStatus().availability == .ready)
+    await h.apiKeyChanged()
+    #expect(await h.currentStatus().availability == .ready)
     await h.client.enqueue(
       json: Self.no,
       model: "gpt-6-luna",
@@ -505,7 +505,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     try h.keyStore.save("zen-key", for: .openCode)
     var settings = MentorSettings()
     settings.provider = .openCode
-    await h.loop.updateSettings(settings)
+    await h.updateSettings(settings)
     await h.waitUntil { $0.availability == .ready }
     await h.client.enqueue(json: Self.no)
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
