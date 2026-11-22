@@ -58,6 +58,19 @@ a shortcut another app holds, on-device recognition unavailable), and every
 variant of the menu bar mark, at the size the bar draws it, with the word a
 replay puts beside it, and enlarged.
 
+## Stores in tests
+
+A TCA `TestStore` puts every task in its process on the main thread while it
+lives, and two that overlap can leave it so after both are gone. A test that
+blocks there waiting for the main actor, as the control listener's socket tests
+do, then waits for good, time limit and all. So stores are made only in
+`Tests/AthinaFeaturesTests`, inside `StoreTests`, whose suites run one at a
+time, and `make test` runs that target in a process of its own. A test there
+fails on a store made anywhere else, and every test in `StoreTests` fails if it
+begins or ends with the switch on. A bare `swift test` does not split the
+targets: on a toolchain that runs them all in one process, as CI's Swift 6.3
+does, it can hang, so run `make test`.
+
 ## Quarantine
 
 A flaky test is quarantined rather than run again until it passes: nothing in

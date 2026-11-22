@@ -84,10 +84,12 @@ launching a second copy from Finder, which was equally true before.
 
 `Package.swift` defines the targets and `scripts/bundle.sh` wraps the release
 binary in an app bundle with `Resources/Info.plist` and
-`Resources/Athina.entitlements`, then signs it. `swift build` and `swift test`
-work directly too. The bundle `make build` makes is a development one: it carries
-the end-to-end harness's control API (the `ControlAPI` package trait, see [The
-control API](docs/e2e.md#the-control-api)), which a release never does.
+`Resources/Athina.entitlements`, then signs it. `swift build` works directly
+too; run the tests with `make test`, since a bare `swift test` can hang on CI's
+toolchain (see [Stores in tests](docs/testing.md#stores-in-tests)). The bundle
+`make build` makes is a development one: it carries the end-to-end harness's
+control API (the `ControlAPI` package trait, see [The control
+API](docs/e2e.md#the-control-api)), which a release never does.
 
 `Athina --snapshot <dir>` (`Sources/Athina/Snapshots.swift`) renders every
 window with sample data to PNG files (light and dark) without starting the
