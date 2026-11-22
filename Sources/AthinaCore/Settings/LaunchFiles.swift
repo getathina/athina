@@ -288,6 +288,9 @@ public final class DataDirectoryLock: @unchecked Sendable {
   }
 
   deinit {
+    // Closing is not enough: a child being spawned holds a copy of the open
+    // file until its exec, and the hold lasts as long as any copy does.
+    _ = flock(descriptor, LOCK_UN)
     close(descriptor)
   }
 
