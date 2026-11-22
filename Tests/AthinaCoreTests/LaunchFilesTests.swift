@@ -335,6 +335,48 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
     _ = next
   }
 
+  /// A release lets go even while a child has a copy of the open file.
+  ///
+  /// A process being spawned has one until its exec, and an `flock` lasts as
+  /// long as any copy does. The child here keeps its copy for the whole test,
+  /// so nothing depends on when a spawn happens to run.
+  @Test func releaseLetsGoWhileAChildStillHoldsACopyOfTheOpenFile() throws {
+    let directory = scratch()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var lock: DataDirectoryLock? = try DataDirectoryLock.acquire(in: directory, pid: 4242)
+    let path = directory.appendingPathComponent(DataDirectoryLock.fileName).path
+    var file = stat()
+    try #require(stat(path, &file) == 0)
+    let held = try #require(
+      (0..<getdtablesize()).first { descriptor in
+        var candidate = stat()
+        return fstat(descriptor, &candidate) == 0 && candidate.st_dev == file.st_dev
+          && candidate.st_ino == file.st_ino
+      }
+    )
+
+    let child = Process()
+    child.executableURL = URL(fileURLWithPath: "/bin/cat")
+    // cat waits on the pipe, so it writes nothing to the copy it holds.
+    child.standardInput = Pipe()
+    child.standardOutput = FileHandle(fileDescriptor: held, closeOnDealloc: false)
+    try child.run()
+    defer {
+      child.terminate()
+      child.waitUntilExit()
+    }
+
+    #expect(throws: DataDirectoryLock.Failure.inUse(pid: 4242)) {
+      try DataDirectoryLock.acquire(in: directory, pid: 99)
+    }
+    _ = lock
+    lock = nil
+
+    let next = try DataDirectoryLock.acquire(in: directory, pid: 7)
+    #expect(child.isRunning)
+    _ = next
+  }
+
   @Test func aLiveLaunchHoldsNothing() {
     var files = LaunchFiles(arguments: ["Athina"], clientMode: .live, supportDirectory: scratch())
     guard case .notNeeded = files.claim(clientMode: .live) else {
