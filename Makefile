@@ -9,7 +9,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help doctor build all run test test-e2e snapshots check snapshots-approve \
-	lint format run-live record snapshots-smoke icons demo measure release clean
+	lint format run-live record snapshots-smoke test-e2e-tart icons demo measure release clean
 
 help:
 	@awk -f scripts/make-help.awk $(MAKEFILE_LIST)
@@ -79,6 +79,9 @@ record: $(if $(filter 1,$(SPEND)),build) ## the app on your API key, saving each
 snapshots-smoke: ## CI's snapshots-smoke check reproduced; drifts on a Mac unlike CI's
 	@scripts/snapshots.sh smoke $(SHARD)
 ##= SHARD=<k>/<n> only the screenshots CI's shard k of n draws
+
+test-e2e-tart: ## both e2e tiers in a throwaway Tart VM, not on this screen; first pulls 69 GB
+	@scripts/e2e/tart.sh
 
 icons: ## redraw the app icon, menu bar mark and README icon from Resources/Mark
 	swift scripts/mark-assets.swift .
