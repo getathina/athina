@@ -70,6 +70,7 @@ fails on a store made anywhere else, and every test in `StoreTests` fails if it
 begins or ends with the switch on. A bare `swift test` does not split the
 targets: on a toolchain that runs them all in one process, as CI's Swift 6.3
 does, it can hang, so run `make test`.
+An unfiltered `make test` also fails if either of its processes ran no test.
 
 ## Quarantine
 

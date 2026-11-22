@@ -46,6 +46,7 @@ runs() {
 	grep -hE 'Test run with [0-9]+ tests? ' "build/logs/$1.log" "build/logs/$1-features.log" 2>/dev/null
 }
 tests() { runs "$1" | sed -E 's/.*Test run with ([0-9]+) tests?.*/\1/' | awk '{ n += $1 } END { print n + 0 }'; }
+ran_none() { ! grep -qE 'Test run with [1-9][0-9]* tests? ' "build/logs/$1.log" 2>/dev/null; }
 issues() { runs "$1" | grep ' failed after ' | sed -nE 's/.* with ([0-9]+) issues?( \(including ([0-9]+) known issues?\))?.*/\1 \3/p' | awk '{ n += $1 - $2 } END { print n + 0 }'; }
 
 quarantined=""
@@ -56,6 +57,17 @@ else
 	in_two_processes test ${quarantined:+--skip "$quarantined"}
 fi
 status=$?
+# A whole run that left either process without a test did not split as meant,
+# so it fails, unless nothing ran at all because the build failed. A filter,
+# and the quarantine's own run, may leave either one empty.
+if [ -z "${1:-}" ] && { [ "$status" -eq 0 ] || [ -n "$(runs test)" ]; }; then
+	for process in test test-features; do
+		if ran_none "$process"; then
+			echo "test: failed, the $process process ran no test, so its --skip pattern did not select as meant; log build/logs/$process.log" >&2
+			exit 1
+		fi
+	done
+fi
 if [ "$status" -ne 0 ]; then
 	if [ -n "$(runs test)" ]; then
 		echo "test: failed, $(issues test) issues in $(tests test) tests; rerun one with make test FILTER=<name>, logs build/logs/test.log and build/logs/test-features.log" >&2
