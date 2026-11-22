@@ -36,6 +36,15 @@ public actor EventBroadcaster<Element: Sendable> {
     }
   }
 
+  /// Delivers an event if `stands` holds as it is delivered.
+  ///
+  /// Returns whether it was delivered.
+  func send(_ element: Element, while stands: @Sendable () -> Bool) -> Bool {
+    guard stands() else { return false }
+    send(element)
+    return true
+  }
+
   /// Ends every current subscriber's stream and forgets them.
   public func finish() {
     for continuation in continuations.values {

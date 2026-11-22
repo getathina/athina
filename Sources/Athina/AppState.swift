@@ -483,8 +483,10 @@ final class AppState {
 
   private func attach(mentor: MentorLoop) async {
     self.mentor = mentor
-    // An answer given while the loop was being made reached no loop.
+    // An answer given, or a pause chosen, while the loop was being made
+    // reached no loop.
     await mentor.setConsented(settings.hasConsent)
+    await mentor.setPaused(isPaused)
     let mentorEvents = await mentor.events()
     await mentor.start()
     mentorTask = Task { [weak self] in
@@ -683,6 +685,9 @@ final class AppState {
     let paused = isPaused
     AppState.log.notice("pause toggled: \(paused)")
     cancelTalkBack()
+    // Straight to each, so neither waits on the other: the loop's stream can
+    // be behind a call when the mode change arrives in it.
+    Task { await mentor?.setPaused(paused) }
     Task { await pipeline?.setPaused(paused) }
   }
 
@@ -847,6 +852,7 @@ final class AppState {
 
   func clearJournal() async {
     do {
+      await mentor?.journalWillClear()
       await mentor?.resetUnderstanding()
       // The live lists empty themselves as the journal does.
       try await pipeline?.clearJournal()

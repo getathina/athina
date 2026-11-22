@@ -16,6 +16,9 @@ import Foundation
 /// Consent (`Consent`) outranks everything: until the person allows Athina to
 /// watch and send, every gate holds, whatever the mode, the key, or the
 /// settings say, and a suggestion finished after it is withdrawn is never shown.
+/// Pause holds everything that carries the screen the moment it is chosen,
+/// ahead of the mode, and work begun before a pause, a withdrawal or Delete
+/// Everything sends nothing more.
 public struct MentorScheduler: Equatable, Sendable {
   /// What the loop knows about the world when it asks a gate.
   public struct Conditions: Equatable, Sendable {
@@ -30,6 +33,12 @@ public struct MentorScheduler: Equatable, Sendable {
     /// A toast the user has talked to is up: from the key going down until
     /// that toast is closed, so its answer can be read.
     public var talkingBack: Bool
+    /// The person has paused Athina, which the loop hears from the app ahead
+    /// of the mode.
+    public var paused: Bool
+    /// The work being gated began, or its screen was captured, before the
+    /// last pause, withdrawal or Delete Everything.
+    public var interrupted: Bool
     /// Spend this hour as a fraction of the cap (1 or more means capped).
     public var spendFraction: Double
     /// How much slower the cadences currently run because of spend.
@@ -38,13 +47,16 @@ public struct MentorScheduler: Equatable, Sendable {
     public var nextHourStart: Date
 
     /// Creates conditions; by default nothing is in flight, nobody is
-    /// talking back, nothing is spent, and cadences run at their settings.
+    /// talking back, nothing is paused or interrupted, nothing is spent, and
+    /// cadences run at their settings.
     public init(
       mode: SensingMode,
       consented: Bool,
       hasAPIKey: Bool,
       callInFlight: Bool = false,
       talkingBack: Bool = false,
+      paused: Bool = false,
+      interrupted: Bool = false,
       spendFraction: Double = 0,
       cadenceMultiplier: Double = 1,
       nextHourStart: Date
@@ -54,6 +66,8 @@ public struct MentorScheduler: Equatable, Sendable {
       self.hasAPIKey = hasAPIKey
       self.callInFlight = callInFlight
       self.talkingBack = talkingBack
+      self.paused = paused
+      self.interrupted = interrupted
       self.spendFraction = spendFraction
       self.cadenceMultiplier = cadenceMultiplier
       self.nextHourStart = nextHourStart
@@ -67,6 +81,8 @@ public struct MentorScheduler: Equatable, Sendable {
     case disabled
     case noAPIKey
     case paused
+    /// It began before the last pause, withdrawal or Delete Everything.
+    case interrupted
     case idle
     case excludedApp
     case waitingForPermissions
@@ -89,6 +105,7 @@ public struct MentorScheduler: Equatable, Sendable {
       case .disabled: "mentor is off in Settings"
       case .noAPIKey: "no API key"
       case .paused: "paused"
+      case .interrupted: "from before a pause, a withdrawal or Delete Everything"
       case .idle: "idle"
       case .excludedApp: "excluded app"
       case .waitingForPermissions: "waiting for permissions"
@@ -122,6 +139,9 @@ public struct MentorScheduler: Equatable, Sendable {
   public enum MentorHold: Equatable, Sendable {
     /// Consent was withdrawn while triage ran.
     case noConsent
+    /// Athina was paused while triage ran, or what triage read came before a
+    /// pause, a withdrawal or Delete Everything.
+    case unavailable(Hold)
     /// Triage placed the activity outside every declared context.
     case outOfContext(ContextExclusion)
     case triageSaidNo(reason: String)
@@ -132,6 +152,7 @@ public struct MentorScheduler: Equatable, Sendable {
     public var label: String {
       switch self {
       case .noConsent: Hold.noConsent.label
+      case .unavailable(let hold): hold.label
       case .outOfContext(let exclusion): "outside every declared context (\(exclusion.label))"
       case .triageSaidNo(let reason): "triage passed: \(reason)"
       case .tooSoon(let until):
@@ -158,6 +179,8 @@ public struct MentorScheduler: Equatable, Sendable {
     case expired(age: TimeInterval)
     /// Consent was withdrawn while it was being made, so it is never shown.
     case withdrawn
+    /// Athina is paused as it finishes, so it is never shown.
+    case paused
   }
 
   /// Whether a follow-up question may go to the mentor tier.
@@ -228,6 +251,7 @@ public struct MentorScheduler: Equatable, Sendable {
   public func availabilityHold(conditions: Conditions) -> Hold? {
     if let hold = MentorScheduler.callGate(consented: conditions.consented) { return hold }
     guard settings.enabled else { return .disabled }
+    if let hold = MentorScheduler.screenHold(conditions: conditions) { return hold }
     switch conditions.mode {
     case .paused: return .paused
     case .idle: return .idle
@@ -277,6 +301,9 @@ public struct MentorScheduler: Equatable, Sendable {
     now: Date
   ) -> MentorGate {
     if MentorScheduler.callGate(consented: conditions.consented) != nil { return .hold(.noConsent) }
+    if let hold = MentorScheduler.screenHold(conditions: conditions) {
+      return .hold(.unavailable(hold))
+    }
     if case .outside(let exclusion) = context { return .hold(.outOfContext(exclusion)) }
     guard triage.worthALook else { return .hold(.triageSaidNo(reason: triage.reason)) }
     if conditions.spendFraction >= 1 {
@@ -301,9 +328,11 @@ public struct MentorScheduler: Equatable, Sendable {
   /// A suggestion made while a talked-to toast is up is held so that toast, the
   /// recording, the pending answer, and the answer on screen stay as they are;
   /// when that toast closes it is shown, unless it waited longer than
-  /// `maxObservationAge`, in which case it expires unseen.
+  /// `maxObservationAge`, in which case it expires unseen. One finished while
+  /// Athina is paused is never shown.
   public func publishGate(madeAt: Date, conditions: Conditions, now: Date) -> PublishGate {
     if MentorScheduler.callGate(consented: conditions.consented) != nil { return .withdrawn }
+    if conditions.paused { return .paused }
     if conditions.talkingBack { return .hold }
     let age = now.timeIntervalSince(madeAt)
     if age > MentorScheduler.maxObservationAge { return .expired(age: age) }
@@ -323,13 +352,32 @@ public struct MentorScheduler: Equatable, Sendable {
 
   // MARK: Call gate
 
-  /// The last check before a request reaches the network: nil when it may
-  /// go, otherwise why not.
+  /// Whether any call at all may be made: nil when one may, otherwise why
+  /// not.
   ///
   /// It is made on every call whichever path it came by, Test Connection
   /// included, and every other gate asks it first.
   public static func callGate(consented: Bool) -> Hold? {
     consented ? nil : .noConsent
+  }
+
+  /// The last check before a request of one tier reaches the network: nil
+  /// when it may go, otherwise why not.
+  ///
+  /// Test Connection carries no screen, so consent alone decides it. Every
+  /// other request is also held while paused, and when it was begun before
+  /// the last pause, withdrawal or Delete Everything.
+  public static func callGate(for tier: ModelTier, conditions: Conditions) -> Hold? {
+    if let hold = callGate(consented: conditions.consented) { return hold }
+    return tier == .test ? nil : screenHold(conditions: conditions)
+  }
+
+  /// What holds anything that carries the screen, whatever the mode has
+  /// caught up with.
+  private static func screenHold(conditions: Conditions) -> Hold? {
+    if conditions.paused { return .paused }
+    if conditions.interrupted { return .interrupted }
+    return nil
   }
 
   /// Returns when the next mentor call may start, its interval stretched by

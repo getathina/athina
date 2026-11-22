@@ -21,7 +21,7 @@ public struct FocusChange: Sendable {
 /// Follows the frontmost app and its focused window and element through
 /// NSWorkspace notifications and AX observers, and reads the context on demand.
 @AXActor
-public final class FocusTracker {
+public final class FocusTracker: FocusTracking {
   private var onChange: (@Sendable (FocusChange) -> Void)?
 
   private var excludedBundleIDs: Set<String> = []
