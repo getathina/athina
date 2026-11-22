@@ -9,8 +9,8 @@
 #                   baselines; with k/n, only the snapshots CI shard k of n
 #                   renders and compares (SnapshotShard, in Sources/SnapshotDiff)
 #   smoke [<k>/<n>] what CI's snapshots-smoke runs: draw every snapshot in
-#                   the test process with swift-snapshot-testing and fail on any
-#                   drift from its reference image; with k/n, only the snapshots
+#                   the test process and fail on any drift swift-snapshot-testing
+#                   finds from its reference image; with k/n, only the snapshots
 #                   shard k of n draws, by the SnapshotShard table the full gate
 #                   splits by (CI runs it whole, on one runner)
 #   smoke-local [<base>]

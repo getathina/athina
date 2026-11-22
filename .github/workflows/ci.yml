@@ -227,8 +227,8 @@ jobs:
 
   snapshots-smoke:
     # The fast UI check, and the check the main ruleset requires: draws every
-    # snapshot in the test process with swift-snapshot-testing and compares
-    # each with its reference image, recorded on this image with the pinned
+    # snapshot in the test process and compares each with swift-snapshot-testing
+    # against its reference image, recorded on this image with the pinned
     # Xcode as the snapshots baselines were (docs/ci.md "UI snapshot smoke
     # test"). One runner: most of the job is fetching and compiling, which the
     # build cache cuts to what changed, and drawing every image takes about a

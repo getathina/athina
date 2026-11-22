@@ -10,8 +10,8 @@
   @testable import Athina
 
   /// The UI smoke test (docs/ci.md "UI snapshot smoke test"): every snapshot `--snapshot` renders,
-  /// from the same specs and sample data, drawn inside this process by swift-snapshot-testing and
-  /// compared with the reference image the CI runner recorded for it.
+  /// from the same specs and sample data, composited inside this process (`InProcessCompositor`)
+  /// and compared by swift-snapshot-testing with the reference image the CI runner recorded for it.
   ///
   /// It never records a reference. A missing one fails like a changed one, and the render that
   /// would replace it goes to `build/snapshots-smoke/references`, which CI uploads for
@@ -206,26 +206,19 @@
       }
     }
 
-    /// The window drawn in this process by swift-snapshot-testing's view
-    /// strategy, rather than captured from the window server as `--snapshot`
-    /// does.
+    /// The window's content composited in this process by Core Animation, rather than captured
+    /// from the window server as `--snapshot` does.
     ///
-    /// It draws the window's frame view, the view under the content that paints
-    /// the window's background, so the picture has the same backdrop, and it
-    /// shows much of what sits on Liquid Glass, which the content view drawn on
-    /// its own leaves out. Drawn in process, a view is drawn as its layers
-    /// stand, so the first capture needs no wait.
+    /// Composited in process, a window is pictured as its layers stand, so the first capture
+    /// needs no wait. A capture that cannot be composited fails the test rather than being taken
+    /// again.
     private static let capture = Snapshots.Capture(waitsForDisplay: false, backingScale: 1) {
       window,
       hosting in
-      let frameView = window.contentView?.superview ?? hosting
-      let image = await withCheckedContinuation { continuation in
-        Snapshotting<NSView, NSImage>.image.snapshot(frameView).run {
-          continuation.resume(returning: $0)
-        }
-      }
-      return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+      try compositor.get().picture(of: hosting, in: window)
     }
+
+    private static let compositor = Result { try InProcessCompositor() }
 
     /// A picture of one colour, which a window that drew nothing gives.
     private static func isBlank(_ bitmap: Bitmap) -> Bool {

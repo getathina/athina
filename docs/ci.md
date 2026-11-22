@@ -17,8 +17,8 @@ checks that it carries the control API, runs every API-tier scenario of the
 end-to-end harness and compares their checkpoints with approved baselines (see
 [Checkpoints](#checkpoints));
 `snapshots-smoke`, the fast UI check, draws every
-snapshot inside a test process with swift-snapshot-testing and compares each
-with its reference image (see [UI snapshot smoke test](#ui-snapshot-smoke-test)); and `snapshots`, the
+snapshot inside a test process and compares each with swift-snapshot-testing
+against its reference image (see [UI snapshot smoke test](#ui-snapshot-smoke-test)); and `snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
 through the window server, so Liquid Glass and materials are in them,
 replay-mode renders on a scaled clock included, compares the renders with the
@@ -445,15 +445,20 @@ of the drawing.
 `SnapshotShard` gives shard k (the test reads the shard from
 `UI_SNAPSHOTS_SMOKE_SHARD`), should it be split again.
 
-It draws each window inside the test process, with swift-snapshot-testing's
-view strategy on the window's frame view (the view under the content that
-paints the window's background), rather than capturing it from the window
+It composites each window's content inside the test process, with Core
+Animation's own compositor over the window's background
+(`InProcessCompositor`), rather than capturing it from the window
 server, so it builds and runs in a fraction of the time `snapshots` takes.
-Its pictures leave out what only the window server composites: Liquid Glass
-and materials are not drawn, so a toast shows its words and controls on the
-plain window background, and what sits on glass can take another colour or,
-like the toast's button bezels, close button and microphone in light mode,
-not show at all. Scroll bars are always shown, as on the runner, whatever the
+It does not ask the views to draw into a picture, as swift-snapshot-testing's
+view strategy does: on macOS 27 that runs drawing the window never shows,
+which wrote a recorder's shortcut twice, and applies no layer filters, which
+drew a toast's text black on dark glass. Its pictures are still not the
+window server's, so glass and materials can differ from `snapshots`', and a
+test process has no app bundle, so the app icon is a plain folder and the
+accent is the system's. The process that runs the test also declares the
+macOS 27 SDK where the app built by SwiftPM declares 26.0, and macOS can draw
+for each differently, as it colours selectable text on glass: `snapshots`
+shows what the app's own process draws. Scroll bars are always shown, as on the runner, whatever the
 Mac is set to. It catches a changed
 layout, text, colour, control or state; how glass looks is `snapshots`' to
 check. A pixel matches when it is within 2 Delta E of the reference (a
@@ -463,8 +468,8 @@ on every run for the reasons a `--snapshot` render does (see [UI snapshot
 baselines](#ui-snapshot-baselines)), in UTC and the runner's US English locale, drawn at the runner's
 1x scale whatever the display's: a fixed clock, animations and Core Animation's clock stopped, a window
 with a fixed backdrop, and captures until two in a row agree, in fresh windows
-until two agree. A window drawn in process is drawn as its layers stand, so
-it skips the frames `--snapshot` waits for before its first capture.
+until two agree. A window composited in process is pictured as its layers
+stand, so it skips the frames `--snapshot` waits for before its first capture.
 
 The test never records a reference. A snapshot with no reference fails, as a
 drifted one does, and a reference no snapshot produces fails until it is
