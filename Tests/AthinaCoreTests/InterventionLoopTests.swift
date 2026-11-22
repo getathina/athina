@@ -144,10 +144,10 @@ struct InterventionLoopTests {
         cacheReadInputTokens: 300
       )
     )
-    let before = await h.loop.currentStatus()
+    let before = await h.currentStatus()
 
     let followUp = try #require(
-      await h.loop.askFollowUp(about: suggestion, question: "does that work with tags", at: t0)
+      await h.askFollowUp(about: suggestion, question: "does that work with tags", at: t0)
     )
     #expect(followUp.id > 0)
     #expect(followUp.timestamp == t0)
@@ -183,7 +183,7 @@ struct InterventionLoopTests {
     #expect(call.usage.inputTokens == 900)
     let expectedCost = PriceTable.defaults.cost(of: call.usage, model: "claude-sonnet-5")!
     #expect(abs(call.cost - expectedCost) < 1e-9)
-    let after = await h.loop.currentStatus()
+    let after = await h.currentStatus()
     #expect(after.callsThisHour == before.callsThisHour + 1)
     #expect(after.spendThisHour > before.spendThisHour)
     #expect(try await h.journal.recentEvents(limit: 1).first?.kind == .talkBack)
@@ -203,16 +203,16 @@ struct InterventionLoopTests {
     await h.client.enqueue(json: Self.no)
     await h.observe(Fixtures.observation(at: h.clock.date), expectCalls: 1)
     let suggestion = try await journaledSuggestion(h)
-    h.input.yield(.modeChanged(.paused))
+    h.send(.modeChanged(.paused))
     // Wait for the pause to be consumed: a later observation is held for it.
     await h.observe(
       Fixtures.observation(id: 2, at: h.clock.date, window: "b", text: "b"),
       expectCalls: 1
     )
-    #expect(await h.loop.currentStatus().lastGate?.hold == .paused)
+    #expect(await h.currentStatus().lastGate?.hold == .paused)
 
     let followUp = try #require(
-      await h.loop.askFollowUp(about: suggestion, question: "why", at: t0)
+      await h.askFollowUp(about: suggestion, question: "why", at: t0)
     )
     #expect(followUp.answer == nil)
     #expect(followUp.error == "paused")
@@ -230,16 +230,16 @@ struct InterventionLoopTests {
     await h.client.enqueue(
       .failure(.api(status: 529, type: "overloaded_error", message: "Overloaded"))
     )
-    let failed = try #require(await h.loop.askFollowUp(about: suggestion, question: "why"))
+    let failed = try #require(await h.askFollowUp(about: suggestion, question: "why"))
     #expect(failed.error == "overloaded_error (HTTP 529): Overloaded")
     #expect(try await h.journal.recentModelCalls(limit: 1).first?.outcome == .error)
 
     await h.client.enqueue(json: "not json")
-    let garbage = try #require(await h.loop.askFollowUp(about: suggestion, question: "again"))
+    let garbage = try #require(await h.askFollowUp(about: suggestion, question: "again"))
     #expect(garbage.error == "could not parse the follow-up reply")
 
     await h.client.enqueue(json: #"{"answer": " \n "}"#)
-    let empty = try #require(await h.loop.askFollowUp(about: suggestion, question: "once more"))
+    let empty = try #require(await h.askFollowUp(about: suggestion, question: "once more"))
     #expect(empty.answer == nil)
     #expect(empty.error == "the follow-up reply had an empty answer")
     #expect(try await h.journal.recentModelCalls(limit: 1).first?.outcome == .error)
@@ -262,7 +262,7 @@ struct InterventionLoopTests {
   @Test func aSuggestionThatArrivesMidExchangeWaitsUntilTheTalkedToToastCloses() async throws {
     let h = try await MentorLoopTests.Harness()
     let s1 = try await journaledSuggestion(h)
-    await h.loop.setTalkingBack(true)
+    await h.setTalkingBack(true)
 
     await h.client.enqueue(json: Self.yes)
     await h.client.enqueue(json: Self.suggestion(region: "null"))
@@ -272,12 +272,12 @@ struct InterventionLoopTests {
     #expect(s2.title == "Use --filter")
 
     await h.client.enqueue(json: #"{"answer": "Line 12."}"#)
-    let followUp = try #require(await h.loop.askFollowUp(about: s1, question: "which line", at: t0))
+    let followUp = try #require(await h.askFollowUp(about: s1, question: "which line", at: t0))
     #expect(followUp.answer == "Line 12.")
 
     #expect(try await h.journal.suggestion(id: s2.id)?.feedback == nil)
 
-    await h.loop.setTalkingBack(false)
+    await h.setTalkingBack(false)
     // One pass over everything published: S2 appears once, and only after the answer did.
     let events = await h.drain(until: isSuggestion)
     let answered = events.firstIndex {
@@ -330,13 +330,13 @@ struct InterventionLoopTests {
   @Test @MainActor func aHeldSuggestionIsListedOnlyOnceItIsShown() async throws {
     let h = try await MentorLoopTests.Harness()
     let a = try await journaledSuggestion(h)
-    await h.loop.setTalkingBack(true)
+    await h.setTalkingBack(true)
 
     let view = await ListedSuggestions(
-      status: h.loop.currentStatus(),
-      floor: h.loop.suggestionFloor
+      status: h.currentStatus(),
+      floor: h.suggestionFloor
     )
-    let events = await h.loop.events()
+    let events = await h.events()
     let journal = h.journal
     let following = [
       Task { @MainActor in
@@ -364,7 +364,7 @@ struct InterventionLoopTests {
     await view.wait { view.journaled.contains { $0.id == b.id } }
     let whileHeld = view.listed
 
-    await h.loop.setTalkingBack(false)
+    await h.setTalkingBack(false)
     await view.wait { view.listed.last == [b.id, a.id] }
 
     #expect(whileHeld.allSatisfy { !$0.contains(b.id) })
@@ -380,12 +380,11 @@ struct InterventionLoopTests {
     let a = try await journaledSuggestion(h)
 
     let view = await ListedSuggestions(
-      status: h.loop.currentStatus(),
-      floor: h.loop.suggestionFloor
+      status: h.currentStatus(),
+      floor: h.suggestionFloor
     )
-    let events = await h.loop.events()
+    let events = await h.events()
     let journal = h.journal
-    let loop = h.loop
     let following = [
       Task { @MainActor in
         var asked = false
@@ -395,7 +394,7 @@ struct InterventionLoopTests {
           view.list()
           if !asked, status.holdsSuggestionsAfter != nil {
             asked = true
-            await loop.setTalkingBack(true)
+            await h.setTalkingBack(true)
             view.talking = true
             view.list()
           }
@@ -419,10 +418,10 @@ struct InterventionLoopTests {
     await view.wait { view.journaled.contains { $0.id == b.id } && view.talking }
     // Whether talking back caught B depends on where the loop was. Caught,
     // B is held, and no list has it before the exchange ends.
-    let held = h.loop.suggestionFloor.value != nil
+    let held = h.suggestionFloor.value != nil
     let beforeRelease = view.listed
 
-    await h.loop.setTalkingBack(false)
+    await h.setTalkingBack(false)
     await view.wait { view.listed.last == [b.id, a.id] }
 
     if held { #expect(beforeRelease.allSatisfy { !$0.contains(b.id) }) }
@@ -452,7 +451,7 @@ struct InterventionLoopTests {
 
   @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {
     let h = try await MentorLoopTests.Harness()
-    await h.loop.setTalkingBack(true)
+    await h.setTalkingBack(true)
     await h.client.enqueue(json: Self.yes)
     await h.client.enqueue(json: Self.suggestion(region: "null"))
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
@@ -460,7 +459,7 @@ struct InterventionLoopTests {
 
     // The exchange outlasts the staleness bound before the toast closes.
     h.clock.advance(by: .seconds(MentorScheduler.maxObservationAge + 1))
-    await h.loop.setTalkingBack(false)
+    await h.setTalkingBack(false)
     let events = await h.drain { if case .feedback = $0 { return true } else { return false } }
     #expect(!events.contains(where: isSuggestion))
     guard case .feedback(let expired)? = events.last else {
@@ -478,13 +477,13 @@ struct InterventionLoopTests {
 
   @Test func pausingExpiresAHeldSuggestionInsteadOfShowingIt() async throws {
     let h = try await MentorLoopTests.Harness()
-    await h.loop.setTalkingBack(true)
+    await h.setTalkingBack(true)
     await h.client.enqueue(json: Self.yes)
     await h.client.enqueue(json: Self.suggestion(region: "null"))
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
     let held = try #require(try await h.journal.recentSuggestions(limit: 1).first)
 
-    h.input.yield(.modeChanged(.paused))
+    h.send(.modeChanged(.paused))
     let events = await h.drain { if case .feedback = $0 { return true } else { return false } }
     #expect(!events.contains(where: isSuggestion))
     guard case .feedback(let expired)? = events.last else {
@@ -498,7 +497,7 @@ struct InterventionLoopTests {
         == "Expired, never shown: Use --filter"
     )
     // Nothing is left to show when the talked-to toast closes.
-    await h.loop.setTalkingBack(false)
+    await h.setTalkingBack(false)
     #expect(try await h.journal.suggestion(id: held.id)?.feedback == .expiredUnseen)
   }
 
@@ -511,14 +510,14 @@ struct InterventionLoopTests {
     await h.client.setDelay(.milliseconds(400))
     await h.client.enqueue(json: Self.no)
     await h.client.enqueue(json: #"{"answer": "After the call."}"#)
-    h.input.yield(.observation(Fixtures.observation(id: 1, at: h.clock.date)))
+    h.send(.observation(Fixtures.observation(id: 1, at: h.clock.date)))
     // Triage is held in flight until the clock moves past its delay.
     await h.clock.waitForSleepers()
-    #expect(await h.loop.currentStatus().inFlight == .triage)
+    #expect(await h.currentStatus().inFlight == .triage)
 
-    let asked = Task { await h.loop.askFollowUp(about: suggestion, question: "which line", at: t0) }
+    let asked = Task { await h.askFollowUp(about: suggestion, question: "which line", at: t0) }
     await h.waitUntil { $0.pendingFollowUp != nil }
-    let pending = try #require(await h.loop.currentStatus().pendingFollowUp)
+    let pending = try #require(await h.currentStatus().pendingFollowUp)
     #expect(pending.question == "which line")
     #expect(pending.suggestionID == suggestion.id)
     #expect(pending.since == t0)
@@ -533,7 +532,7 @@ struct InterventionLoopTests {
     #expect(followUp.answer == "After the call.")
     #expect(followUp.error == nil)
     #expect(await h.client.sent.map(\.call.kind) == ["triage", "followUp"])
-    #expect(await h.loop.currentStatus().pendingFollowUp == nil)
+    #expect(await h.currentStatus().pendingFollowUp == nil)
     #expect(try await h.journal.followUps(suggestionID: suggestion.id) == [followUp])
     #expect(try await h.journal.recentModelCalls(limit: 2).allSatisfy { $0.outcome != .error })
   }
@@ -543,19 +542,19 @@ struct InterventionLoopTests {
     let suggestion = try await journaledSuggestion(h)
     await h.client.setDelay(.milliseconds(400))
     await h.client.enqueue(json: Self.no)
-    h.input.yield(.observation(Fixtures.observation(id: 1, at: h.clock.date)))
+    h.send(.observation(Fixtures.observation(id: 1, at: h.clock.date)))
     await h.clock.waitForSleepers()
 
-    let older = Task { await h.loop.askFollowUp(about: suggestion, question: "first", at: t0) }
+    let older = Task { await h.askFollowUp(about: suggestion, question: "first", at: t0) }
     await h.waitUntil { $0.pendingFollowUp?.question == "first" }
-    let newer = Task { await h.loop.askFollowUp(about: suggestion, question: "second", at: t0 + 1) }
+    let newer = Task { await h.askFollowUp(about: suggestion, question: "second", at: t0 + 1) }
     #expect(await older.value == nil)
     await h.waitUntil { $0.pendingFollowUp?.question == "second" }
-    #expect(await h.loop.currentStatus().pendingFollowUp?.question == "second")
+    #expect(await h.currentStatus().pendingFollowUp?.question == "second")
 
-    await h.loop.withdrawFollowUp()
+    await h.withdrawFollowUp()
     #expect(await newer.value == nil)
-    #expect(await h.loop.currentStatus().pendingFollowUp == nil)
+    #expect(await h.currentStatus().pendingFollowUp == nil)
     h.clock.advance(by: .milliseconds(400))
     await h.waitUntil { $0.inFlight == nil && $0.lastTriage != nil }
     #expect(await h.client.sent.map(\.call.kind) == ["triage"])
@@ -578,7 +577,7 @@ struct InterventionLoopTests {
         """#
     )
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
-    let status = await h.loop.currentStatus()
+    let status = await h.currentStatus()
     #expect(status.lastMentor?.outcome == .error)
     #expect(
       status.lastMentor?.detail
@@ -600,10 +599,10 @@ struct InterventionLoopTests {
     let h = try await MentorLoopTests.Harness()
     let suggestion = try await journaledSuggestion(h)
     #expect(suggestion.calloutShown == false)
-    let shown = await h.loop.noteCalloutShown(suggestionID: suggestion.id)
+    let shown = await h.noteCalloutShown(suggestionID: suggestion.id)
     #expect(shown?.calloutShown == true)
     #expect(try await h.journal.suggestion(id: suggestion.id)?.calloutShown == true)
-    #expect(await h.loop.noteCalloutShown(suggestionID: 404) == nil)
+    #expect(await h.noteCalloutShown(suggestionID: 404) == nil)
   }
 }
 
@@ -723,20 +722,17 @@ struct ReplayInterventionTests {
 
     let journal = try Journal.inMemory()
     let clock = AdjustableClock(startingAt: MentorLoopTests.Harness.start)
-    let (stream, input) = AsyncStream<SensingEvent>.makeStream()
-    let loop = MentorLoop(
-      settings: MentorSettings(),
+    let loop = await MentorLoopHarness(
+      unstartedWith: MentorSettings(),
       journal: journal,
       client: client,
       keyStore: InMemoryKeyStore(),
-      events: stream,
-      consented: true,
       clock: clock,
-      calendar: MentorLoopTests.calendar
+      consented: true
     )
     let output = await loop.events()
     await loop.start()
-    input.yield(.modeChanged(.watching))
+    loop.send(.modeChanged(.watching))
 
     // A screen like the recorded one: the display the frame shows, the
     // window filling it, and the screenshot sent to the mentor tier.
@@ -748,7 +744,7 @@ struct ReplayInterventionTests {
     observation.frame.height = fixture.frame.height
     observation.frame.screenRect = display
     observation.focus.windowFrame = display
-    input.yield(.observation(observation))
+    loop.send(.observation(observation))
 
     var shown: Suggestion?
     for await event in output {

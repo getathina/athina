@@ -22,85 +22,7 @@ struct ReplayLoopTests {
     func delete(for provider: ModelProvider) throws {}
   }
 
-  private struct Harness {
-    let clock: AdjustableClock
-    let loop: MentorLoop
-    let input: AsyncStream<SensingEvent>.Continuation
-    let output: AsyncStream<MentorEvent>
-    /// Everything the loop publishes, for waiting on its state without polling.
-    private let updates: AsyncStream<MentorEvent>
-
-    /// On a test clock started at noon on the UTC calendar the loop is
-    /// given, so an understanding written moments ago is never expired by
-    /// a day turning over mid-test.
-    init(
-      journal: Journal,
-      client: any ClaudeClient,
-      keyStore: any KeyStore = InMemoryKeyStore(),
-      settings: MentorSettings = MentorSettings(),
-      clock: AdjustableClock = AdjustableClock(startingAt: MentorLoopTests.Harness.start)
-    ) async {
-      self.clock = clock
-      let (stream, continuation) = AsyncStream<SensingEvent>.makeStream()
-      input = continuation
-      loop = MentorLoop(
-        settings: settings,
-        journal: journal,
-        client: client,
-        keyStore: keyStore,
-        events: stream,
-        consented: true,
-        clock: clock,
-        calendar: MentorLoopTests.calendar
-      )
-      output = await loop.events()
-      updates = await loop.events()
-      await loop.start()
-      input.yield(.modeChanged(.watching))
-      await waitUntil { $0.mode == .watching }
-    }
-
-    /// Sends an observation a millisecond after whatever came before it
-    /// and waits, on the events the loop publishes, until it has gated it
-    /// through the refresh gate, which runs last, and finished every call
-    /// it started for it.
-    func observe(
-      _ observation: ActivityObservation,
-      calls: @Sendable () async -> Int,
-      expectCalls: Int
-    ) async {
-      clock.advance(by: .milliseconds(1))
-      let sentAt = clock.date
-      input.yield(.observation(observation))
-      await waitUntil(
-        { status in
-          status.lastGate?.observationID == observation.id && status.inFlight == nil
-            && MentorLoopTests.Harness.refreshGateRan(status, since: sentAt)
-        },
-        calls: {
-          await calls() >= expectCalls
-        }
-      )
-    }
-
-    /// Waits until `condition` holds of the loop's status and `calls`
-    /// does, checking again after every event the loop publishes.
-    func waitUntil(_ condition: (MentorStatus) -> Bool, calls: () async -> Bool = { true }) async {
-      var events = updates.makeAsyncIterator()
-      while true {
-        if condition(await loop.currentStatus()), await calls() { return }
-        guard await events.next() != nil else { return }
-      }
-    }
-
-    /// The next suggestion the loop publishes.
-    func nextSuggestion() async -> Suggestion? {
-      for await event in output {
-        if case .suggestion(let suggestion) = event { return suggestion }
-      }
-      return nil
-    }
-  }
+  private typealias Harness<Client: ClaudeClient> = MentorLoopHarness<Client>
 
   private static func fixture(
     _ kind: String,
@@ -161,7 +83,7 @@ struct ReplayLoopTests {
     let h = await Harness(journal: journal, client: client, keyStore: keys)
 
     // No key is saved, and none is needed.
-    #expect(await h.loop.currentStatus().availability == .ready)
+    #expect(await h.currentStatus().availability == .ready)
     await h.observe(
       Fixtures.observation(id: 1, at: h.clock.date),
       calls: { await client.served.count },
@@ -171,7 +93,7 @@ struct ReplayLoopTests {
     #expect(suggestion.title == "Rename them in one go")
     #expect(suggestion.model == "claude-sonnet-5")
 
-    let status = await h.loop.currentStatus()
+    let status = await h.currentStatus()
     #expect(status.lastTriage?.outcome == .candidate)
     #expect(status.lastMentor?.outcome == .suggested)
     #expect(status.lastMentor?.replayed == true)
@@ -194,10 +116,10 @@ struct ReplayLoopTests {
       ]
     )
     #expect(keys.loadCount == 0)
-    #expect(await h.loop.hasAPIKey)
+    #expect(await h.hasAPIKey)
 
     // Test Connection in replay mode replays too, and still reads no key.
-    #expect(await h.loop.testConnection() == .failure(.replay("no recorded test call to replay")))
+    #expect(await h.testConnection() == .failure(.replay("no recorded test call to replay")))
     #expect(try await journal.recentModelCalls(limit: 1).first?.replayed == true)
     #expect(keys.loadCount == 0)
   }
@@ -214,9 +136,9 @@ struct ReplayLoopTests {
       client: client,
       keyStore: InMemoryKeyStore()
     )
-    #expect(await keyless.loop.currentStatus().availability == .noAPIKey)
-    #expect(await keyless.loop.hasAPIKey == false)
-    await keyless.loop.stop()
+    #expect(await keyless.currentStatus().availability == .noAPIKey)
+    #expect(await keyless.hasAPIKey == false)
+    await keyless.stop()
 
     let journal = try Journal.inMemory()
     let h = await Harness(
@@ -224,8 +146,8 @@ struct ReplayLoopTests {
       client: client,
       keyStore: InMemoryKeyStore(key: "sk-ant-test")
     )
-    #expect(await h.loop.currentStatus().availability == .ready)
-    #expect(await h.loop.testConnection() == .failure(.notSent(client.reason)))
+    #expect(await h.currentStatus().availability == .ready)
+    #expect(await h.testConnection() == .failure(.notSent(client.reason)))
     let call = try #require(try await journal.recentModelCalls(limit: 1).first)
     #expect(!call.replayed)
     #expect(call.outcome == .error)
@@ -370,7 +292,7 @@ struct ReplayLoopTests {
     )
     let suggestion = try #require(await h.nextSuggestion())
     #expect(
-      await h.loop.recordFeedback(suggestionID: suggestion.id, feedback: .never)?.feedback == .never
+      await h.recordFeedback(suggestionID: suggestion.id, feedback: .never)?.feedback == .never
     )
     settings.mentor.neverRules = SuppressionRules.adding(
       NeverRule(
@@ -382,7 +304,7 @@ struct ReplayLoopTests {
       to: settings.mentor.neverRules
     )
     try store.save(settings)
-    await h.loop.stop()
+    await h.stop()
 
     #expect(try await journal.recentSuggestions(limit: 5).map(\.feedback) == [.never])
     #expect(store.load().mentor.neverRules.count == 2)
@@ -639,7 +561,7 @@ struct ReplayLoopTests {
 
     var nextMentor = 0
     var shown: [Suggestion] = []
-    var lastHarness: Harness?
+    var lastHarness: Harness<ReplayClaudeClient>?
     let clock = AdjustableClock(startingAt: MentorLoopTests.Harness.start)
     // Every triage recording, then the first again: past the last
     // recording the cycle starts over.
@@ -653,7 +575,7 @@ struct ReplayLoopTests {
           MentorLoop.decode(TriageVerdict.self, from: $0)
         }
       )
-      let standing = await h.loop.currentUnderstanding()
+      let standing = await h.currentUnderstanding()
       let before = await client.served.count
       let expected = before + (verdict.worthALook ? 2 : 1)
       await h.observe(
@@ -669,7 +591,7 @@ struct ReplayLoopTests {
       let served = await client.served
       try #require(served.count == expected)
       #expect(served[before].fixtureName == entry.name)
-      let status = await h.loop.currentStatus()
+      let status = await h.currentStatus()
       #expect(status.lastTriage?.outcome == (verdict.worthALook ? .candidate : .quiet))
       #expect(status.lastTriage?.detail == verdict.reason.withPlainDashes)
 
@@ -683,7 +605,7 @@ struct ReplayLoopTests {
           }
         )
         // The reply rewrote the understanding on the way past, for free.
-        let rewritten = try #require(await h.loop.currentUnderstanding())
+        let rewritten = try #require(await h.currentUnderstanding())
         #expect(rewritten.revision == (standing?.revision ?? 0) + 1)
         #expect(rewritten.source == .mentorCall)
         #expect(rewritten.cost == 0)
@@ -702,7 +624,7 @@ struct ReplayLoopTests {
           #expect(suggestion.body == payload.body.withPlainDashes)
           #expect(suggestion.category == payload.category)
           #expect((suggestion.judgedGoal != nil) == payload.category.judgesAgainstGoal)
-          let answered = await h.loop.recordFeedback(
+          let answered = await h.recordFeedback(
             suggestionID: suggestion.id,
             feedback: .tellMeMore
           )
@@ -718,7 +640,7 @@ struct ReplayLoopTests {
           status.lastMentorHold?.hold == .triageSaidNo(reason: verdict.reason.withPlainDashes)
         )
       }
-      if let previous = lastHarness { await previous.loop.stop() }
+      if let previous = lastHarness { await previous.stop() }
       lastHarness = h
     }
     #expect(!shown.isEmpty, "the committed fixtures must show at least one suggestion")
@@ -729,12 +651,12 @@ struct ReplayLoopTests {
       client.entries.first { $0.fixture.identity.kind == ModelTier.test.rawValue }
     )
     let testModel = try testEntry.fixture.result.get().model
-    #expect(await again.loop.testConnection() == .success(testModel))
+    #expect(await again.testConnection() == .success(testModel))
 
     let calls = try await journal.recentModelCalls(limit: 100)
     #expect(!calls.isEmpty)
     #expect(calls.allSatisfy { $0.replayed && $0.cost == 0 })
-    let status = await again.loop.currentStatus()
+    let status = await again.currentStatus()
     #expect(status.spendThisHour == 0)
     let history = try await journal.recentSuggestions(limit: 50)
     #expect(Set(history.map(\.id)) == Set(shown.map(\.id)))
@@ -810,7 +732,7 @@ struct ReplayLoopTests {
       ]
     )
     #expect(served.first?.fixtureName == entry.name)
-    let status = await h.loop.currentStatus()
+    let status = await h.currentStatus()
     #expect(status.lastGate?.hold == .notAChangeMoment(.floor))
     let call = try #require(status.lastRefresh)
     #expect(call.tier == .understanding)
@@ -821,7 +743,7 @@ struct ReplayLoopTests {
     #expect(status.spendThisHour == 0)
     #expect(status.callsThisHour == 0)
 
-    let record = try #require(await h.loop.currentUnderstanding())
+    let record = try #require(await h.currentUnderstanding())
     #expect(record.revision == 2)
     #expect(record.source == .periodic)
     #expect(record.cost == 0 && record.cumulativeCost == 0)
@@ -829,5 +751,27 @@ struct ReplayLoopTests {
       record.content == verdict.understanding.bounded(toTokens: settings.understandingTokenBudget)
     )
     #expect(try await journal.recentModelCalls(limit: 5).map(\.tier) == [.understanding])
+  }
+}
+
+extension MentorHarness {
+  /// On a test clock started at noon on the UTC calendar the loop is
+  /// given, so an understanding written moments ago is never expired by
+  /// a day turning over mid-test.
+  fileprivate init(
+    journal: Journal,
+    client: Client,
+    keyStore: any KeyStore = InMemoryKeyStore(),
+    settings: MentorSettings = MentorSettings(),
+    clock: AdjustableClock = AdjustableClock(startingAt: Self.start)
+  ) async {
+    await self.init(
+      startedWith: settings,
+      journal: journal,
+      client: client,
+      keyStore: keyStore,
+      clock: clock,
+      consented: true
+    )
   }
 }

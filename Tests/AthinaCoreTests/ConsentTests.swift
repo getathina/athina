@@ -276,19 +276,19 @@ import Testing
     await h.client.enqueue(json: Self.yes)
     await h.client.enqueue(json: Self.suggestion)
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 0)
-    let status = await h.loop.currentStatus()
+    let status = await h.currentStatus()
     #expect(status.availability == .noConsent)
     #expect(status.lastGate?.hold == .noConsent)
     #expect(status.lastRefreshHold?.hold == .unavailable(.noConsent))
 
     let followUp = try #require(
-      await h.loop.askFollowUp(about: try await journaledSuggestion(h), question: "why")
+      await h.askFollowUp(about: try await journaledSuggestion(h), question: "why")
     )
     #expect(followUp.answer == nil)
     #expect(followUp.error == MentorScheduler.Hold.noConsent.label)
 
     #expect(
-      await h.loop.testConnection() == .failure(.notSent(MentorScheduler.Hold.noConsent.label))
+      await h.testConnection() == .failure(.notSent(MentorScheduler.Hold.noConsent.label))
     )
     #expect(await h.client.sent.isEmpty)
     #expect(try await h.journal.recentModelCalls(limit: 10).isEmpty)
@@ -299,8 +299,8 @@ import Testing
     await h.client.enqueue(json: Self.yes)
     await h.client.enqueue(json: Self.suggestion)
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 0)
-    await h.loop.setConsented(true)
-    #expect(await h.loop.currentStatus().availability == .ready)
+    await h.setConsented(true)
+    #expect(await h.currentStatus().availability == .ready)
     await h.observe(
       Fixtures.observation(id: 2, at: h.clock.date, window: "b", text: "b"),
       expectCalls: 2
@@ -315,14 +315,14 @@ import Testing
     await h.client.setDelay(.milliseconds(400))
     await h.client.enqueue(json: Self.yes)
     await h.client.enqueue(json: Self.suggestion)
-    h.input.yield(.observation(Fixtures.observation(id: 1, at: h.clock.date)))
+    h.send(.observation(Fixtures.observation(id: 1, at: h.clock.date)))
     await h.clock.waitForSleepers()
-    #expect(await h.loop.currentStatus().inFlight == .triage)
+    #expect(await h.currentStatus().inFlight == .triage)
 
-    await h.loop.setConsented(false)
+    await h.setConsented(false)
     h.clock.advance(by: .milliseconds(400))
     await h.waitUntil { $0.lastMentorHold != nil && $0.inFlight == nil }
-    #expect(await h.loop.currentStatus().lastMentorHold?.hold == .noConsent)
+    #expect(await h.currentStatus().lastMentorHold?.hold == .noConsent)
     #expect(await h.client.sent.map(\.call.kind) == ["triage"])
   }
 
@@ -333,13 +333,13 @@ import Testing
     await h.client.setDelay(.milliseconds(400))
     await h.client.enqueue(json: Self.yes)
     await h.client.enqueue(json: Self.suggestion)
-    h.input.yield(.observation(Fixtures.observation(id: 1, at: h.clock.date)))
+    h.send(.observation(Fixtures.observation(id: 1, at: h.clock.date)))
     await h.clock.waitForSleepers()
     h.clock.advance(by: .milliseconds(400))
     await h.waitUntil { $0.inFlight == .mentor }
     await h.clock.waitForSleepers()
 
-    await h.loop.setConsented(false)
+    await h.setConsented(false)
     h.clock.advance(by: .milliseconds(400))
     let events = await h.drain { if case .feedback = $0 { return true } else { return false } }
     #expect(!events.contains { if case .suggestion = $0 { return true } else { return false } })
