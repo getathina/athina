@@ -357,8 +357,8 @@ declared, nothing is inside anything: no triage call is made at all, and the
 Mentoring pane, the menu, and the debug panel all say so.
 
 To keep an app from being looked at at all, exclude it in Settings > Privacy >
-Excluded apps: while an excluded app is frontmost nothing is captured, so
-nothing about it can reach any tier.
+Excluded apps: its windows are left out of every screenshot, and while it is
+frontmost nothing is captured, so nothing in its windows can reach any tier.
 
 The menu bar menu shows the current verdict (`Context: inside "writing Swift"`,
 or why it is out) while it is still about the frontmost app, and

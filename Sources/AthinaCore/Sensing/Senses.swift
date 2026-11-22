@@ -9,8 +9,13 @@ import Foundation
 /// Captures the screen the person is working on.
 public protocol ScreenCapturing: Sendable {
   /// Captures the display showing the window at `windowFrame`, or the main
-  /// display without one, its longest edge at most `maxDimension` pixels.
-  func capture(windowFrame: CGRect?, maxDimension: Int) async throws -> CapturedFrame
+  /// display without one, its longest edge at most `maxDimension` pixels, and
+  /// with no window of an app in `excludedBundleIDs`, which are lowercase.
+  func capture(
+    windowFrame: CGRect?,
+    maxDimension: Int,
+    excluding excludedBundleIDs: Set<String>
+  ) async throws -> CapturedFrame
 }
 
 /// Recognizes the text in a captured frame.

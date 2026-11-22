@@ -136,7 +136,11 @@ final class FakeScreen: ScreenCapturing {
     return held
   }
 
-  func capture(windowFrame: CGRect?, maxDimension: Int) async throws -> CapturedFrame {
+  func capture(
+    windowFrame: CGRect?,
+    maxDimension: Int,
+    excluding excludedBundleIDs: Set<String>
+  ) async throws -> CapturedFrame {
     let capture = Capture(at: clock.seconds, windowFrame: windowFrame, maxDimension: maxDimension)
     let (bits, failure, held) = state.withLock { state in
       state.captures.append(capture)
