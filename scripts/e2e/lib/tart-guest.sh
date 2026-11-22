@@ -6,8 +6,10 @@
 #
 # Nothing of the image is assumed. When it has no bash 4 or newer, Homebrew
 # installs one, as CI does on its runner, which only ever happens in this VM: it
-# comes after the guard below. Nothing else is put right: a missing grant, or a
-# bash that will not install, fails with that reason.
+# comes after the guard below, as does pre-approving the guest agent's screen
+# capture (tart-capture-approval.sh). Nothing else is put right: a missing
+# grant, a bash that will not install, or an approval that will not write,
+# fails with that reason.
 set -uo pipefail
 
 # The device Tart gives every guest, which its guest agent looks for too. This
@@ -36,6 +38,10 @@ fail() {
 	xcodebuild -version
 	printf 'bash %s\n' "$(bash -c 'echo "$BASH_VERSION"')"
 } >"$EVIDENCE/environment.txt" 2>&1
+
+# Before anything captures, so the alert it stops is never due.
+/bin/bash "$ROOT/scripts/e2e/lib/tart-capture-approval.sh" >"$EVIDENCE/capture-approval.txt" 2>&1 \
+	|| fail "the guest agent's screen capture could not be pre-approved in the VM (see evidence/capture-approval.txt)"
 
 bash_is_4() { bash -c '[ "${BASH_VERSINFO[0]}" -ge 4 ]'; }
 

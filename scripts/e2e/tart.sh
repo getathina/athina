@@ -19,8 +19,9 @@
 # interface.
 #
 # On this Mac it installs nothing, changes no permission and has no fallback:
-# without Tart, or without the disk the image needs, it stops and says why. The
-# one install is bash 4, inside the VM, when the image has none.
+# without Tart, or without the disk the image needs, it stops and says why. Two
+# changes are made, both inside the VM: bash 4 is installed when the image has
+# none, and the guest agent's screen capture is pre-approved.
 set -euo pipefail
 
 # cirruslabs/macos-tahoe-xcode, tag 27.1: a macOS 26 guest with Xcode 27.1, so
