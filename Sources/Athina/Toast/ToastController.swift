@@ -1,17 +1,22 @@
 import AppKit
 import ApplicationServices
 import AthinaCore
+import AthinaFeatures
 import CoreGraphics
 import Foundation
-import Observation
 import SwiftUI
 
 /// Owns the floating suggestion panel: a non-activating window that never takes
 /// keyboard focus, placed under the menu bar at the top right of the screen the
 /// user is working on.
 ///
-/// With no suggestion up it can show a short note instead, for a talk-back key
-/// press that has nothing to reply to or an answer's consequence.
+/// What the toast shows and when is `ToastFeature`'s. This hosts `ToastView`
+/// over its store and follows it as each send returns (`HostedParent`),
+/// presenting, ordering out and raising the panel as `ToastFeature.State.panel`
+/// asks and watching clicks and key presses while the state says to; what
+/// those and a drag see goes back as actions.
+/// With no suggestion up the panel can show a short note instead, for a
+/// talk-back key press that has nothing to reply to or an answer's consequence.
 ///
 /// Because the panel never becomes key, VoiceOver hears about it through
 /// announcements, and the menu bar menu offers its answers to the keyboard.
@@ -30,235 +35,79 @@ final class ToastController {
   /// The panel's title while it shows only a note.
   static let noteTitle = "Athina note"
 
-  var onAction: ((Int64, SuggestionFeedback) -> Void)?
-  var onHover: ((Bool) -> Void)?
-
+  private let store: HostedStoreOf<ToastFeature>
   private var panel: NSPanel?
   private var hosting: NSHostingView<ToastPanelRoot>?
-  private var model = ToastModel()
+  /// What the state asked of the panel that has been done.
+  private var panelDone = ToastFeature.Panel()
   private var outsideClickMonitors: [Any] = []
   /// Watch for any key going down while a note that names a next step is up
-  /// (`showNote(_:untilClicked:)`) and `sensingMode` allows it, and only then.
+  /// and the sensing mode allows it, and only then.
   private var keyPressMonitors: [Any] = []
-  /// What Athina is sensing: a waiting note notices key presses only while
-  /// `ToastPlacement.noticesKeyPresses(in:)` allows it, and is click-only
-  /// otherwise.
-  var sensingMode: SensingMode = .stopped {
-    didSet {
-      if noteUntilClicked, ToastPlacement.noticesKeyPresses(in: sensingMode) {
-        startWatchingForKeyPresses()
-      } else {
-        stopWatchingForKeyPresses()
-      }
-    }
-  }
-  private var noteTask: Task<Void, Never>?
-  /// The note's time on screen, held while the pointer is over the panel.
-  private var noteCountdown = ToastCountdown()
-  /// Whether the note stays until the next click rather than timing out:
-  /// one that names a next step.
-  private var noteUntilClicked = false
-  private var pointerOverPanel = false
-  /// Where the person dragged the panel to, its top-left corner, until the
-  /// next suggestion.
-  private var movedTopLeft: CGPoint?
   /// Set when the person starts dragging the panel, so the move that follows
   /// is told apart from the panel's own placement.
   private var movedByPerson = false
   private var moveObservers: [NSObjectProtocol] = []
-  /// Whether the toast has told VoiceOver once where its answers are.
-  private var saidWhereAnswersAre = false
-  /// What a note's time on screen is waited out on.
-  private let clock: any AthinaClock
   /// Whether clicks outside Athina's own windows reach the toast.
   ///
   /// A hermetic run's never do, so whoever is using the Mac cannot dismiss a
   /// toast they cannot see; the control API's `outside-click` stands in.
   private let watchesOtherApps: Bool
 
-  init(clock: any AthinaClock, watchesOtherApps: Bool = true) {
-    self.clock = clock
+  init(store: HostedStoreOf<ToastFeature>, watchesOtherApps: Bool = true) {
+    self.store = store
     self.watchesOtherApps = watchesOtherApps
   }
 
-  var isShowingSuggestion: Bool { model.suggestion != nil && (panel?.isVisible ?? false) }
-
-  /// Shows a suggestion.
+  /// Follows the store from now on.
   ///
-  /// - Parameters:
-  ///   - suggestion: The suggestion to show.
-  ///   - expanded: Whether it opens with its explanation showing.
-  ///   - exchange: The talk-back exchange about it so far.
-  ///   - asked: Whether the person asked for it, as Show Last Suggestion
-  ///     does. One they did not ask for arrives while they are busy, so
-  ///     VoiceOver hears it after what it is saying rather than over it.
-  func show(_ suggestion: Suggestion, expanded: Bool, exchange: [FollowUp], asked: Bool = false) {
-    clearNote()
-    if model.suggestion?.id != suggestion.id {
-      movedTopLeft = nil
+  /// A sample's never starts, so it draws no panel and watches nothing.
+  func start() {
+    store.follow { [weak self] in self?.followStore() }
+  }
+
+  /// Does what the state has asked of the panel since this last ran, and
+  /// watches what it says to watch.
+  ///
+  /// It runs as each send returns, before what the send announces, before the
+  /// parent acts on it and before anything is drawn.
+  private func followStore() {
+    let asked = store.panel
+    let isUp = store.isUp
+    let watchesClicks = store.watchesClicks
+    let watchesKeyPresses = store.watchesKeyPresses
+
+    if asked.orderedOut != panelDone.orderedOut {
+      panel?.orderOut(nil)
     }
-    model.suggestion = suggestion
-    model.expanded = expanded
-    model.exchange = exchange
-    model.talkBack = .idle
-    present()
-    startWatchingForOutsideClicks()
-    var announcement = ToastController.announcement(for: suggestion)
-    if !saidWhereAnswersAre {
-      saidWhereAnswersAre = true
-      announcement += " Answer it from the Athina menu."
+    if asked.looksAgainForKeys(since: panelDone) {
+      // Each note looks again at whether other apps' key presses can be heard.
+      stopWatchingForKeyPresses()
     }
-    Announce.post(announcement, priority: asked ? .high : .medium)
-  }
+    if asked.presented != panelDone.presented, isUp {
+      present()
+    }
+    if asked.raised != panelDone.raised {
+      bringToFront()
+    }
+    panelDone = asked
 
-  /// What VoiceOver hears for a suggestion: what the header, title and body
-  /// show.
-  static func announcement(for suggestion: Suggestion) -> String {
-    """
-    Athina, \(suggestion.category.label) in \(suggestion.appName): \(suggestion.title). \
-    \(suggestion.body)
-    """
-  }
-
-  func dismiss() {
-    stopWatchingForOutsideClicks()
-    clearNote()
-    model.outlined = nil
-    model.suggestion = nil
-    model.exchange = []
-    model.talkBack = .idle
-    orderOut()
-  }
-
-  /// Says what the callout outlines, or that it is gone: the callout draws no
-  /// words of its own, so the note carries them.
-  func showOutlined(_ outlined: String?) {
-    model.outlined = outlined
+    if watchesClicks {
+      startWatchingForOutsideClicks()
+    } else {
+      stopWatchingForOutsideClicks()
+    }
+    if watchesKeyPresses {
+      startWatchingForKeyPresses()
+    } else {
+      stopWatchingForKeyPresses()
+    }
   }
 
   /// Orders the toast above anything shown since, such as a callout.
-  func bringToFront() {
+  private func bringToFront() {
     guard let panel, panel.isVisible else { return }
     panel.orderFrontRegardless()
-  }
-
-  func expand() {
-    model.expanded = true
-    if let suggestion = model.suggestion {
-      Announce.post(suggestion.explanation, priority: .high)
-    }
-  }
-
-  /// While the user is talking back the toast stays where it is: it is
-  /// brought to the front so no window covers it, and no click, timeout,
-  /// or hover can take it down until the exchange is over.
-  func setTalkBack(_ state: TalkBackState) {
-    let previous = model.talkBack
-    model.talkBack = state
-    if state.keepsToastUp {
-      bringToFront()
-    }
-    switch state {
-    case .listening where !previous.isListening:
-      Announce.post("Listening")
-    case .thinking where !previous.isThinking:
-      Announce.post("Asking the mentor")
-    case .idle, .listening, .waiting, .thinking:
-      break
-    }
-  }
-
-  /// Shows the exchange, naming `provider`, whose API the questions went
-  /// to, in a failure's sentence.
-  func setExchange(_ exchange: [FollowUp], provider: ModelProvider) {
-    model.provider = provider
-    if let latest = exchange.last,
-      latest.id != model.exchange.last?.id || latest.answer != model.exchange.last?.answer
-    {
-      Announce.post(
-        latest.answer.map { "Athina answered: \($0)" }
-          ?? ExchangeEntry.failure(latest, provider: provider),
-        priority: .high
-      )
-    }
-    model.exchange = exchange
-  }
-
-  func setTalkBackKey(_ key: String?) {
-    model.talkBackKey = key
-  }
-
-  /// A short line for the user: inside the toast when a suggestion is up,
-  /// otherwise as a small panel of its own.
-  ///
-  /// It clears itself once there has been time to read it
-  /// (`ToastPlacement.noteDuration`), a time that stands still while the
-  /// pointer is over it.
-  ///
-  /// - Parameters:
-  ///   - text: What the note says.
-  ///   - untilClicked: For a note that names a next step: it stays until the
-  ///     next click, anywhere, instead of timing out, or the next key press
-  ///     while `sensingMode` lets a note notice one.
-  func showNote(_ text: String, untilClicked: Bool = false) {
-    clearNote()
-    model.note = text
-    noteUntilClicked = untilClicked
-    if model.suggestion == nil {
-      present()
-      if untilClicked { startWatchingForOutsideClicks() }
-    }
-    if untilClicked { startWatchingForKeyPresses() }
-    Announce.post(text)
-    guard !untilClicked else { return }
-    noteCountdown.run(for: ToastPlacement.noteDuration(for: text), from: clock.date)
-    if pointerOverPanel {
-      noteCountdown.hold(at: clock.date)
-    } else {
-      waitOutNote()
-    }
-  }
-
-  /// The note on screen, if any.
-  var note: String? { model.note }
-
-  /// Clears the note when its countdown runs out, unless the countdown was
-  /// held or run again meanwhile.
-  private func waitOutNote() {
-    guard let deadline = noteCountdown.deadline else { return }
-    noteTask?.cancel()
-    let clock = clock
-    noteTask = Task { [weak self] in
-      try? await clock.sleep(untilDate: deadline)
-      guard !Task.isCancelled, let self, self.noteCountdown.deadline == deadline else { return }
-      self.takeDownNote()
-    }
-  }
-
-  private func takeDownNote() {
-    clearNote()
-    if model.suggestion == nil {
-      stopWatchingForOutsideClicks()
-      orderOut()
-    }
-  }
-
-  /// Takes the panel off screen.
-  ///
-  /// An ordered-out panel is not told the pointer left it, so the pointer is
-  /// taken to be off it until it comes over again.
-  private func orderOut() {
-    panel?.orderOut(nil)
-    pointerOverPanel = false
-  }
-
-  private func clearNote() {
-    noteTask?.cancel()
-    noteTask = nil
-    noteCountdown.cancel()
-    noteUntilClicked = false
-    stopWatchingForKeyPresses()
-    model.note = nil
   }
 
   // MARK: Key presses
@@ -278,9 +127,7 @@ final class ToastController {
   /// Athina's own windows count, and a click still takes the note down. The
   /// monitors exist only while such a note is up and the mode allows them.
   private func startWatchingForKeyPresses() {
-    guard keyPressMonitors.isEmpty, ToastPlacement.noticesKeyPresses(in: sensingMode) else {
-      return
-    }
+    guard keyPressMonitors.isEmpty else { return }
     if watchesOtherApps, AXIsProcessTrusted(),
       let global = NSEvent.addGlobalMonitorForEvents(
         matching: .keyDown,
@@ -308,26 +155,9 @@ final class ToastController {
     keyPressMonitors.removeAll()
   }
 
-  /// A key went down; a key held since before the note came up, such as the
-  /// talk-back shortcut that brought it, repeats rather than going down again,
-  /// and does not count.
+  /// A key went down; the reducer is told only whether it repeats.
   private func keyWentDown(repeated: Bool) {
-    guard noteUntilClicked, !repeated else { return }
-    takeDownNote()
-  }
-
-  /// The pointer came over the panel or left it: a note's time stands still
-  /// while it is over it, and runs on with what it had when it leaves.
-  private func pointerOverPanelChanged(_ over: Bool) {
-    pointerOverPanel = over
-    guard model.note != nil, !noteUntilClicked else { return }
-    if over {
-      noteTask?.cancel()
-      noteCountdown.hold(at: clock.date)
-    } else if let remaining = noteCountdown.held {
-      noteCountdown.run(for: remaining, from: clock.date)
-      waitOutNote()
-    }
+    store.send(.keyDown(isRepeat: repeated))
   }
 
   private func present() {
@@ -342,10 +172,11 @@ final class ToastController {
       NSScreen.screens.first { mouse.map($0.frame.contains) ?? false } ?? NSScreen.main
       ?? NSScreen.screens.first
     panel.title =
-      model.suggestion == nil ? ToastController.noteTitle : ToastController.suggestionTitle
+      store.suggestion == nil ? ToastController.noteTitle : ToastController.suggestionTitle
     // New content appears at once; only the same toast growing or shrinking
     // is animated (`relayout`).
-    place(panel, on: movedTopLeft == nil ? screen : panel.screen ?? screen, animated: false)
+    let kept = store.movedTopLeft != nil
+    place(panel, on: kept ? panel.screen ?? screen : screen, animated: false)
     panel.orderFrontRegardless()
   }
 
@@ -400,18 +231,12 @@ final class ToastController {
 
   private func handleClick(at location: CGPoint, onToast: Bool) {
     guard let panel, panel.isVisible else { return }
-    guard let suggestion = model.suggestion else {
-      // A note that waits for the next click, wherever it lands.
-      if noteUntilClicked { takeDownNote() }
-      return
-    }
     let click = ToastClick(
       onToast: onToast,
       location: location,
       menuBarItems: NSApp.windows.filter(\.holdsStatusBarButton).map(\.frame)
     )
-    guard click.dismissesToast(talkBack: model.talkBack) else { return }
-    onAction?(suggestion.id, .dismissed)
+    store.send(.mouseDown(click))
   }
 
   /// A mouse-down outside Athina's windows at `location`, in screen
@@ -422,9 +247,7 @@ final class ToastController {
   /// True when the toast was up to hear it, whatever it made of it.
   @discardableResult
   func outsideClick(at location: CGPoint) -> Bool {
-    guard panel?.isVisible == true, model.suggestion != nil || noteUntilClicked else {
-      return false
-    }
+    guard panel?.isVisible == true, store.watchesClicks else { return false }
     handleClick(at: location, onToast: false)
     return true
   }
@@ -449,7 +272,7 @@ final class ToastController {
         [weak self] _ in
         MainActor.assumeIsolated {
           guard let self, self.movedByPerson, let panel = self.panel else { return }
-          self.movedTopLeft = CGPoint(x: panel.frame.minX, y: panel.frame.maxY)
+          self.store.send(.dragged(topLeft: CGPoint(x: panel.frame.minX, y: panel.frame.maxY)))
         }
       },
     ]
@@ -481,15 +304,7 @@ final class ToastController {
     watchForMoves(of: panel)
 
     let view = ToastView(
-      model: model,
-      onAction: { [weak self] feedback in
-        guard let self, let suggestion = self.model.suggestion else { return }
-        self.onAction?(suggestion.id, feedback)
-      },
-      onHover: { [weak self] hovering in
-        self?.pointerOverPanelChanged(hovering)
-        self?.onHover?(hovering)
-      },
+      store: store,
       onSizeChange: { [weak self] in
         self?.relayout()
       }
@@ -522,7 +337,7 @@ final class ToastController {
       size: CGSize(width: ToastController.panelWidth, height: fitted.height),
       visible: screen.visibleFrame,
       margin: ToastController.margin,
-      movedTopLeft: movedTopLeft
+      movedTopLeft: store.movedTopLeft
     )
     movedByPerson = false
     guard frame != panel.frame else { return }
@@ -554,38 +369,6 @@ extension NSWindow {
   }
 }
 
-extension TalkBackState {
-  fileprivate var isListening: Bool {
-    if case .listening = self { return true }
-    return false
-  }
-
-  fileprivate var isThinking: Bool {
-    if case .thinking = self { return true }
-    return false
-  }
-}
-
-/// The toast's content, observable so Tell Me More, the exchange, and the
-/// listening state can change in place.
-@MainActor
-@Observable
-final class ToastModel {
-  var suggestion: Suggestion?
-  var expanded = false
-  /// The talk-back exchange about the suggestion, oldest first.
-  var exchange: [FollowUp] = []
-  /// Whose API the exchange's questions went to.
-  var provider: ModelProvider = .anthropic
-  var talkBack: TalkBackState = .idle
-  /// A short line for the user, inside the toast or on its own.
-  var note: String?
-  /// The talk-back hotkey, shown in the button bar once it is set and voice is usable.
-  var talkBackKey: String?
-  /// What the callout outlines on screen for this suggestion, while it is up.
-  var outlined: String?
-}
-
 /// The toast as the panel holds it: pinned to the panel's top edge, so while
 /// the panel grows or shrinks around it the content stays still under the
 /// pointer.
@@ -609,40 +392,38 @@ struct ToastView: View {
   /// in from the corner.
   static let cornerRadius: CGFloat = inset + 10
 
-  @Bindable var model: ToastModel
-  let onAction: (SuggestionFeedback) -> Void
-  var onHover: (Bool) -> Void = { _ in }
+  let store: HostedStoreOf<ToastFeature>
   var onSizeChange: @MainActor @Sendable () -> Void = {}
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      if let suggestion = model.suggestion {
+      if let suggestion = store.suggestion {
         ToastContent(
           suggestion: suggestion,
-          expanded: model.expanded,
-          exchange: model.exchange,
-          provider: model.provider,
-          talkBack: model.talkBack,
-          note: model.note,
-          talkBackKey: model.talkBackKey,
-          outlined: model.outlined,
+          expanded: store.expanded,
+          exchange: store.exchange,
+          provider: store.provider,
+          talkBack: store.talkBack,
+          note: store.note?.text,
+          talkBackKey: store.talkBackKey,
+          outlined: store.outlined,
           onToggle: {
-            // Expanding reports "tell me more"; AppState records it once
-            // per suggestion, so folding back and forth is only a view change.
-            let wasExpanded = model.expanded
-            model.expanded.toggle()
-            if !wasExpanded { onAction(.tellMeMore) }
+            store.send(.expandButtonTapped)
           },
-          onAction: onAction
+          onAction: { feedback in
+            store.send(.answerButtonTapped(feedback))
+          }
         )
-      } else if let note = model.note {
-        ToastNote(text: note)
+      } else if let note = store.note {
+        ToastNote(text: note.text)
       }
     }
     .frame(width: ToastController.width)
     .glassEffect(.regular, in: .rect(cornerRadius: ToastView.cornerRadius))
     .padding(1)
-    .onHover(perform: onHover)
+    .onHover { hovering in
+      store.send(.hoverChanged(hovering))
+    }
     .onGeometryChange(
       for: CGSize.self,
       of: { proxy in
@@ -921,12 +702,6 @@ struct ExchangeEntry: View {
   /// Whose API the question went to.
   let provider: ModelProvider
 
-  /// What the person reads, and VoiceOver hears, for a question that got no
-  /// answer: why, in Athina's own words (`UserFacing`).
-  static func failure(_ entry: FollowUp, provider: ModelProvider) -> String {
-    UserFacing.followUpError(entry.error ?? "unknown error", provider: provider)
-  }
-
   var body: some View {
     ExchangeLine(speaker: "You", text: entry.question, secondary: true)
     if let answer = entry.answer {
@@ -935,7 +710,7 @@ struct ExchangeEntry: View {
       // The code's own words stay a hover away, for a bug report.
       ExchangeLine(
         speaker: "Athina",
-        text: ExchangeEntry.failure(entry, provider: provider),
+        text: ToastFeature.failure(entry, provider: provider),
         secondary: true
       )
       .help(entry.error ?? "")

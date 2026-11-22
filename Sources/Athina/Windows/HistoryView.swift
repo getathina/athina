@@ -1,5 +1,6 @@
 import AppKit
 import AthinaCore
+import AthinaFeatures
 import Foundation
 import SwiftUI
 
@@ -366,7 +367,7 @@ struct SuggestionDetail: View {
                 } else {
                   exchangeLine(
                     "Athina",
-                    ExchangeEntry.failure(entry, provider: state.settings.mentor.provider),
+                    ToastFeature.failure(entry, provider: state.settings.mentor.provider),
                     at: nil
                   )
                   .help(entry.error ?? "")

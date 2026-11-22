@@ -59,6 +59,53 @@ extension StoreTests {
       )
     }
 
+    /// Announces through the effect that keeps announcements in order.
+    @Reducer
+    struct SayInOrder {
+      @ObservableState
+      struct State: Equatable {}
+
+      enum Action {
+        case say(String, NSAccessibilityPriorityLevel)
+      }
+
+      @Dependency(\.announcer) var announcer
+
+      var body: some ReducerOf<Self> {
+        Reduce { _, action in
+          switch action {
+          case .say(let text, let priority):
+            return announcer.announce(text, priority: priority)
+          }
+        }
+      }
+    }
+
+    @Test func announcingIsDoneByTheTimeTheSendReturns() {
+      let said = LockIsolated<[Announcement]>([])
+      let store = Store(
+        initialState: SayInOrder.State(),
+        reducer: {
+          SayInOrder()
+        },
+        withDependencies: {
+          $0.announcer.post = { text, priority in
+            said.withValue { $0.append(Announcement(text: text, priority: priority)) }
+          }
+        }
+      )
+
+      store.send(.say("Athina answered: yes", .high))
+      #expect(said.value == [Announcement(text: "Athina answered: yes", priority: .high)])
+      store.send(.say("Listening", .medium))
+      #expect(
+        said.value == [
+          Announcement(text: "Athina answered: yes", priority: .high),
+          Announcement(text: "Listening", priority: .medium),
+        ]
+      )
+    }
+
     @Test func anAnnouncementATestDidNotExpectFails() {
       withKnownIssue {
         AnnouncerClient.testValue.post("Listening", .medium)

@@ -42,12 +42,18 @@ Sources/AthinaCore            library, fully testable
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags),
                               ControlMode (whether a launch serves the control API, see docs/e2e.md)
-Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
+Sources/AthinaFeatures        the features, as reducers on The Composable Architecture: ToastFeature (the toast's
+                              lifecycle), HostedParent (a send's windows, announcements and parent caught up, in
+                              that order, as it returns), and Dependencies/ (the clients they reach the clock and
+                              VoiceOver through)
+Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel, following
+                              ToastFeature), Hosted (AppState as the features' parent, until a root store is),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (the global keyboard shortcuts,
                               press and release), Settings/ShortcutRecorder (the recorder in Settings),
                               Snapshots
 Tests/AthinaCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
+Tests/AthinaFeaturesTests     TestStore suites for the features, on the test clock
 ```
 
 ## Sensing loop

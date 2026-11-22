@@ -37,7 +37,8 @@ its reply type decodes, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
 replay's separate files, per-launch directories with their locks and pruning,
 the replay-only `--settings` flag, the line a launch writes as it starts, the
-clocks, a replay's clock flags, the toast countdown, which variant of the mark
+clocks, a replay's clock flags, the toast countdown and the toast's lifecycle
+with what VoiceOver hears of it, which variant of the mark
 the menu bar shows and that every variant is committed at one size, callout mapping and
 every anchor rejection, a callout aging out, transcript matching, the follow-up
 prompt and gate, the toast rule for voice input, the whole loop against a
