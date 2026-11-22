@@ -17,6 +17,7 @@ Sources/AthinaCore            library, fully testable
                               RetentionPolicy
   Sensing/                    AXActor (run-loop thread for the AX API), FocusTracker (NSWorkspace + AXObserver),
                               ScreenCapturer (ScreenCaptureKit), TextRecognizer (Vision),
+                              Senses (a protocol for each sense the pipeline reads, so tests pass fakes),
                               SensingPipeline (orchestration), EventBroadcaster (fan-out AsyncStream)
   Claude/                     ClaudeClient (Messages API request and response types, CallIdentity, AnthropicClient
                               over URLSession, LiveModelClient routing each call by provider), ModelProvider

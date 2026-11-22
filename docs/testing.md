@@ -43,7 +43,8 @@ every anchor rejection, a callout aging out, transcript matching, the follow-up
 prompt and gate, the toast rule for voice input, the whole loop against a
 scripted client, follow-ups included, and the whole loop against the committed
 replay fixtures, replayed strictly, a region and a follow-up answer included,
-and every time-based behavior of the loop on the test clock) and Vision OCR on a
+every time-based behavior of the loop on the test clock, and the sensing loop
+on the test clock with a fake for every sense) and Vision OCR on a
 drawn bitmap, so they need no
 permissions, display, network, microphone, or API key. A committed fixture that
 is stale, or a tier with no committed fixture, fails the run (see [The committed
