@@ -31,13 +31,14 @@ runs:
     - name: Restore the SwiftPM build
       # The key's last part is the sources, so a run of the same sources, such as
       # a rerun or a change to the workflows only, restores that exact cache and
-      # saves none. Otherwise the newest cache of the same job, toolchain and
-      # package manifest is restored (a pull request's own before main's), and
-      # this run saves its own when it succeeds. A new manifest or toolchain
+      # saves none. Otherwise the newest cache of the same job, toolchain,
+      # package manifest and resolved versions (Package.resolved) is restored
+      # (a pull request's own before main's), and this run saves its own when it
+      # succeeds. A new manifest, a new resolved version or a new toolchain
       # starts empty.
       uses: actions/cache@v6
       with:
         path: .build
-        key: swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift') }}-${{ hashFiles('Sources/**', 'Tests/**') }}
+        key: swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**', 'Tests/**') }}
         restore-keys: |
-          swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift') }}-
+          swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-

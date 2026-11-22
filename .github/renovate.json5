@@ -10,7 +10,9 @@
   extends: ['config:recommended', 'schedule:weekly'],
   timezone: 'America/New_York',
   // The only two kinds of dependency here: the actions in .github/workflows
-  // and .github/actions, and the packages Package.swift pins.
+  // and .github/actions, and the packages Package.swift pins exactly. The
+  // packages those bring are held to one version by the committed
+  // Package.resolved, which Renovate never resolves (see the Swift rule below).
   enabledManagers: ['github-actions', 'swift'],
   semanticCommits: 'enabled',
   // A release is offered only once it is three days old, time for a broken or
@@ -33,9 +35,17 @@
       enabled: false,
     },
     {
+      // Renovate moves the pin it updates in Package.resolved but resolves
+      // nothing, so the file's origin hash, and any package an update needs
+      // that Package.swift does not name, stay as they were, and CI's test
+      // check fails until the file is resolved again on the branch (docs/ci.md
+      // "Dependency updates"). The note says so on every such pull request.
       matchManagers: ['swift'],
       groupName: 'Swift packages',
       semanticCommitType: 'build',
+      prBodyNotes: [
+        'Before this can merge, run `scripts/check-package-resolved.sh --fix` on its branch and commit `Package.resolved`: Renovate does not resolve the package graph, and CI\'s test check fails until the file matches `Package.swift` (docs/ci.md "Dependency updates").',
+      ],
     },
   ],
 }
