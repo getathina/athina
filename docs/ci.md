@@ -439,7 +439,7 @@ In CI it runs on one runner, the `snapshots-smoke` job, the check the
 ruleset requires, which runs `make snapshots-smoke` and draws every
 snapshot. Most of that job is fetching and compiling, which the build cache
 cuts to what changed (see [Continuous integration](#continuous-integration)); drawing every image takes
-about a minute, where four runners each compiled the test again for a quarter
+about two minutes, where four runners each compiled the test again for a quarter
 of the drawing.
 `make snapshots-smoke SHARD=<k>/4` still draws only the snapshots
 `SnapshotShard` gives shard k (the test reads the shard from
