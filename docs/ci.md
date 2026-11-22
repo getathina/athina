@@ -1,10 +1,11 @@
 # Continuous integration
 
-CI runs five checks on GitHub's `xcode-27` runner, a public preview image of
-macOS 27 whose Xcode 27.1 builds this package for the macOS 26 it targets with
-the macOS 27 SDK. No job runs on macOS 26 or builds with Xcode 26 or Swift 6.3,
-so CI does not prove that they still work, though all three are still
-supported. Of the five, `test` runs `make test`: `swift test`, then
+CI runs five checks, all but `test` on GitHub's `xcode-27` runner, a public
+preview image of macOS 27 whose Xcode 27.1 builds this package for the macOS 26
+it targets with the macOS 27 SDK. `test` runs on `macos-26` with Xcode 26.6 and
+Swift 6.3 (see Xcode, pinned, below), so it alone proves the supported minimum,
+and only as far as the unit tests and a debug build go: no job launches the app,
+draws its UI or builds a release there. Of the five, `test` runs `make test`: `swift test`, then
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
 tests' build already made rather than compiling the package again; `lint`
@@ -174,7 +175,7 @@ release is offered only once it is three days old (`minimumReleaseAge`), time
 for a broken or compromised release to be pulled first; one whose registry
 gives no release date waits too, and security updates come at once. The
 runner images are left out, since moving CI to a new macOS image is a
-deliberate commit (see One Xcode, pinned, below). The root `Package.resolved` stays uncommitted (see
+deliberate commit (see Xcode, pinned, below). The root `Package.resolved` stays uncommitted (see
 [UI snapshot smoke test](#ui-snapshot-smoke-test)), which Renovate does not
 need. Nothing runs until two steps in the repository's settings, which take an
 admin: install the Mend Renovate GitHub App on the repository, and turn on the
@@ -213,17 +214,25 @@ toolchain and manifest is restored, a pull request's own before main's, and a
 successful run saves its own. GitHub evicts the least recently used caches
 beyond the repository's 10 GB.
 
-**One Xcode, pinned.** Every macOS job selects the Xcode that `.xcode-version`
-names, as `xcodebuild -version` prints it (27.1 today), through the shared
+**Xcode, pinned.** There are two pins. Every macOS job but `test` runs on
+`xcode-27` and selects the Xcode that `.xcode-version`
+names, as `xcodebuild -version` prints it (27.1 today). `test` runs on
+`macos-26` and selects Xcode 26.6, which it names in
+`.github/workflows/ci.yml`: the `xcode-27` image's virtual machine cannot run
+Vision's accurate text recognition, Athina's default, so
+`TextRecognizerTests` fails there, and on `macos-26`, which has no Xcode 27,
+every test runs and nothing is skipped. The exception can go once that test
+passes on `xcode-27`, though CI then stops testing macOS 26, Xcode 26 and
+Swift 6.3 at all. Each job selects its Xcode through the shared
 step in `.github/actions/select-xcode`: by its exact path on the runner,
 `/Applications/Xcode_<version>.app` or the image's other name for it,
 `/Applications/Xcode_<version>.0.app`, never the newest there. It fails,
 naming the Xcodes the runner has, when neither exists, and fails when that
 Xcode reports another version. So a new runner image changes no build, render
-or formatting by itself: moving the pin is one deliberate commit that
+or formatting by itself: moving `.xcode-version` is one deliberate commit that
 refreshes both sets of approved images and runs `make format` with the new
 swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-snapshot-baselines)). The runner's
-label is fixed the same way, but GitHub updates the image behind it, macOS
+labels are fixed the same way, but GitHub updates the image behind each, macOS
 included, so a render can still drift with no change here.
 
 **Superseded runs.** A new push to a pull request cancels that pull request's
@@ -245,7 +254,7 @@ failing check says what to run:
 
 | Check | On a Mac | In CI |
 | --- | --- | --- |
-| `test` | `make test` | the same |
+| `test` | `make test` | the same, on macOS 26 with Xcode 26.6 |
 | `lint` | `make lint` | the same, then the ruleset check above |
 | `test-e2e` | `make test-e2e`, the end-to-end scenarios | the API tier twice, its checkpoints compared with their baselines (see [Checkpoints](#checkpoints)) |
 | `snapshots-smoke` | `make snapshots-smoke` | the same |

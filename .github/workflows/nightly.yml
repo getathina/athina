@@ -28,9 +28,10 @@ jobs:
       - uses: ./.github/actions/select-xcode
       - uses: ./.github/actions/swiftpm-cache
         with:
-          # The same debug build of the package as the test check's make test,
-          # so main's newest cache of it serves, and this saves none of its own.
-          name: test
+          # A cache of its own: the test check's is built with another Xcode
+          # (docs/ci.md "Xcode, pinned"). This runs the replay tests alone,
+          # which need no text recognition, so it is on xcode-27.
+          name: nightly
       - name: Replay the committed fixtures against the current prompts
         # ReplayLoopTests' theCommittedFixturesAreCurrent is the freshness
         # check; the rest of it and ReplayInterventionTests replay the set

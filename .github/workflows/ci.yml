@@ -53,15 +53,19 @@ jobs:
           echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
 
   test:
-    # The package targets macOS 26, so it needs that SDK or a newer one: the
-    # xcode-27 image is macOS 27, and its Xcode 27.1 builds with the macOS 27
-    # SDK. No job runs on macOS 26 (docs/ci.md).
+    # The one macOS job not on xcode-27 (docs/ci.md "Xcode, pinned"): that
+    # image's virtual machine cannot run Vision's accurate text recognition,
+    # Athina's default, which TextRecognizerTests runs. On macos-26 every test
+    # runs, and on the oldest macOS Athina supports, built with Xcode 26's
+    # Swift 6.3. That image has no Xcode 27, so this job pins its own Xcode.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
-    runs-on: xcode-27
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
+        with:
+          version: '26.6'
       - uses: ./.github/actions/swiftpm-cache
         with:
           name: test

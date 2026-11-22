@@ -11,10 +11,10 @@ every rule it can only report, and CI runs `make lint` on every pull request
 and every push to `main`.
 
 A newer swift-format can format the same code differently, so the one CI runs
-is pinned: `.xcode-version` names the Xcode every CI job runs, and so the
+is pinned: `.xcode-version` names the Xcode every CI job but `test` runs, and so the
 swift-format it ships with, as `xcodebuild -version` prints it (27.1 today:
 Swift 6.4, and a swift-format that reports its version as `main`). The `lint` job selects that Xcode by its
-exact path, as every job does (see [Continuous integration](ci.md)), and prints the
+exact path, as every job does its own (see [Continuous integration](ci.md)), and prints the
 Swift and swift-format versions that ran. `make format` and `make lint` read the same file and warn when the
 selected Xcode is another; `DEVELOPER_DIR=<path to that Xcode.app>`
 runs either with the pinned one.
@@ -59,8 +59,9 @@ names each path):
   KeyboardShortcuts' copy, whose sizes differ, into one, which corrupts the
   task allocator and crashes the app
   ([swiftlang/swift#86204](https://github.com/swiftlang/swift/issues/86204));
-  the pinned Swift 6.4 never shows it, so CI cannot catch it. The rule can go
-  once Xcode 26 is no longer supported.
+  `test-e2e`, the job that launches the app, builds with Swift 6.4, which
+  never shows it, so CI cannot catch it. The rule can go once Xcode 26 is no
+  longer supported.
 
 ## Rebasing a branch across the reformat
 

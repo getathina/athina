@@ -26,9 +26,10 @@
       semanticCommitType: 'ci',
     },
     {
-      // The runner images (xcode-27, ubuntu-latest) stay put: moving CI to a
-      // new macOS image is one deliberate commit that also refreshes both
-      // sets of approved images (docs/ci.md).
+      // The runner images (xcode-27, macos-26 for the test job alone,
+      // ubuntu-latest) stay put: moving CI to a new macOS image is one
+      // deliberate commit that also refreshes both sets of approved images
+      // (docs/ci.md).
       matchDatasources: ['github-runners'],
       enabled: false,
     },
