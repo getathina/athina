@@ -178,8 +178,9 @@ but missing, fails before anything is built.
 
 ## CI
 
-`.github/workflows/release.yml` runs `make release` on GitHub's `macos-26`
-runner:
+`.github/workflows/release.yml` runs `make release` on GitHub's `xcode-27`
+runner, compiling against the macOS 27 SDK a bundle that is still universal
+and for macOS 26 or later:
 
 - **On every push to main**, beside the whole suite that `ci.yml` and
   `snapshots.yml` run there ([Continuous integration](ci.md)), so the

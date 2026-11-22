@@ -1,7 +1,10 @@
 # Continuous integration
 
-CI runs five checks on GitHub's `macos-26` runner, which ships Xcode 26 and
-the macOS 26 SDK this package targets: `test` runs `make test`: `swift test`, then
+CI runs five checks on GitHub's `xcode-27` runner, a public preview image of
+macOS 27 whose Xcode 27.1 builds this package for the macOS 26 it targets with
+the macOS 27 SDK. No job runs on macOS 26 or builds with Xcode 26 or Swift 6.3,
+so CI does not prove that they still work, though all three are still
+supported. Of the five, `test` runs `make test`: `swift test`, then
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
 tests' build already made rather than compiling the package again; `lint`
@@ -211,7 +214,7 @@ successful run saves its own. GitHub evicts the least recently used caches
 beyond the repository's 10 GB.
 
 **One Xcode, pinned.** Every macOS job selects the Xcode that `.xcode-version`
-names, as `xcodebuild -version` prints it (26.6 today), through the shared
+names, as `xcodebuild -version` prints it (27.1 today), through the shared
 step in `.github/actions/select-xcode`: by its exact path on the runner,
 `/Applications/Xcode_<version>.app` or the image's other name for it,
 `/Applications/Xcode_<version>.0.app`, never the newest there. It fails,
@@ -219,8 +222,9 @@ naming the Xcodes the runner has, when neither exists, and fails when that
 Xcode reports another version. So a new runner image changes no build, render
 or formatting by itself: moving the pin is one deliberate commit that
 refreshes both sets of approved images and runs `make format` with the new
-swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-snapshot-baselines)). When GitHub's macOS
-27 image leaves preview, CI moves to it in such a commit.
+swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-snapshot-baselines)). The runner's
+label is fixed the same way, but GitHub updates the image behind it, macOS
+included, so a render can still drift with no change here.
 
 **Superseded runs.** A new push to a pull request cancels that pull request's
 runs still going, in both workflows, so a superseded commit stops holding runners: the account
@@ -552,7 +556,10 @@ outside the sandbox, so the harness refuses it on a Mac that holds Athina
 data. The job does grant the hermetic copy's identifier Screen Recording, and
 only that, in the runner's TCC database, so a checkpoint is captured with
 ScreenCaptureKit, glass, title bar and toolbar included, as `snapshots`
-captures a snapshot.
+captures a snapshot. A replay never says which way it captures, so once the
+scenarios are done the job opens that same copy with `--snapshot`, which does,
+prints what it said, and fails, publishing no checkpoints to approve, unless
+that is ScreenCaptureKit.
 
 **Approving an intended change.** Push the change and let `test-e2e` fail on
 the drift, look at the report, then run `make snapshots-approve`
@@ -560,7 +567,8 @@ the drift, look at the report, then run `make snapshots-approve`
 which downloads the `checkpoints` artifact of HEAD's newest CI run and makes
 `Tests/Checkpoints` match it the way it makes `Tests/Snapshots` match the
 `snapshots` renders. The job publishes the artifact only once
-both runs passed and agree, it names the source tree it was taken from, and
+both runs passed and agree and the copy captured with ScreenCaptureKit, it
+names the source tree it was taken from, and
 approving refuses any tree but HEAD's. Commit the images with the change that
 caused them. Baselines never come from a Mac: on a Mac a checkpoint is
 evidence of a run, never compared, since a Mac draws at another scale and
