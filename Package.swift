@@ -140,6 +140,13 @@ let package = Package(
       resources: [.copy("Fixtures")]
     ),
     .testTarget(
+      // The app target itself, for what only it holds: talking back, from the
+      // key going down to the transcript, recorded from a stand-in for the
+      // microphone and recognizer.
+      name: "AthinaTests",
+      dependencies: ["Athina", "AthinaCore"]
+    ),
+    .testTarget(
       // The app target itself, so the test draws the very views and
       // sample data `--snapshot` draws. Without the trait the target has
       // no dependencies and no tests, so `swift test` builds nothing of it.

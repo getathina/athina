@@ -75,10 +75,14 @@ final class ToastController {
   /// A hermetic run's never do, so whoever is using the Mac cannot dismiss a
   /// toast they cannot see; the control API's `outside-click` stands in.
   private let watchesOtherApps: Bool
+  /// Whether the panel is put on screen; a detached state's toast keeps its
+  /// content and never is.
+  private let showsPanel: Bool
 
-  init(clock: any AthinaClock, watchesOtherApps: Bool = true) {
+  init(clock: any AthinaClock, watchesOtherApps: Bool = true, showsPanel: Bool = true) {
     self.clock = clock
     self.watchesOtherApps = watchesOtherApps
+    self.showsPanel = showsPanel
   }
 
   var isShowingSuggestion: Bool { model.suggestion != nil && (panel?.isVisible ?? false) }
@@ -331,6 +335,7 @@ final class ToastController {
   }
 
   private func present() {
+    guard showsPanel else { return }
     let panel = panel ?? makePanel()
     // A window that zooms in is motion; with Reduce Motion it just appears.
     panel.animationBehavior =
