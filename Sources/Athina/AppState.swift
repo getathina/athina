@@ -237,7 +237,7 @@ final class AppState {
   ///
   /// A press that heard nothing does not count.
   private var talkedToSuggestionID: Int64?
-  private let toast: ToastController
+  let toast: ToastController
   private let callouts = CalloutController()
   private var calloutTask: Task<Void, Never>?
   /// What says the screen under the callout is unchanged, and since when.
@@ -252,6 +252,11 @@ final class AppState {
   private var listeningLimitTask: Task<Void, Never>?
   /// Finishes the transcript after the key comes up; cancelled with the exchange.
   private var transcriptTask: Task<Void, Never>?
+  /// Counts the presses that started a recording, so what a press starts
+  /// acts on that press alone.
+  private var presses = 0
+  /// The last press whose key came up: each press is released once.
+  private var releasedPress = 0
 
   private init() {
     clientMode = ModelClientMode(arguments: CommandLine.arguments)
@@ -311,12 +316,17 @@ final class AppState {
     )
   }
 
-  /// A detached state for snapshots and previews: never starts the pipeline.
+  /// A detached state for snapshots, previews and tests: never starts the
+  /// pipeline, and keeps its toast off screen.
+  ///
+  /// Talking back records from `speechInput`, which a test replaces with a
+  /// stand-in that opens no microphone.
   init(
     sampleWithSettings settings: SensingSettings,
     clientMode: ModelClientMode = .live,
     clockMode: ClockMode = .system,
-    speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")
+    speechAvailability: SpeechListener.Availability = .available(locale: "English (US)"),
+    speechInput: any SpeechInput = Microphone()
   ) {
     store = SettingsStore(
       url: FileManager.default.temporaryDirectory.appendingPathComponent(
@@ -332,8 +342,8 @@ final class AppState {
     (clock, clockControl) = clockMode.makeClock(
       base: AdjustableClock(startingAt: Snapshots.referenceDate)
     )
-    toast = ToastController(clock: clock)
-    listener = SpeechListener(clock: clock)
+    toast = ToastController(clock: clock, watchesOtherApps: false, showsPanel: false)
+    listener = SpeechListener(clock: clock, input: speechInput)
     // A fixed per-launch name, so a replay render reads the same every time.
     launchFiles = LaunchFiles(
       arguments: [],
@@ -1538,7 +1548,14 @@ final class AppState {
   /// The loop hears when an exchange begins, so a suggestion that arrives
   /// before the talked-to toast is closed (`takeDown`) waits instead of
   /// replacing it.
+  ///
+  /// The microphone records only while talk-back shows listening: leaving
+  /// listening ends a recording that is still capturing.
   private func setTalkBack(_ state: TalkBackState) {
+    let listening = if case .listening = state { true } else { false }
+    if !listening, listener.isListening {
+      listener.cancel()
+    }
     let begins = talkBack == .idle && state != .idle
     talkBack = state
     toast.setTalkBack(state)
@@ -1607,8 +1624,12 @@ final class AppState {
       )
       return
     }
-    guard mode.isActive else {
-      let reason = mode == .excluded ? "not watching the app in front" : mode.label.lowercased()
+    guard mode.isActive, !isPaused else {
+      // A pause holds from the moment it is asked for, before the mode it
+      // brings arrives.
+      let sensing = isPaused ? SensingMode.paused : mode
+      let reason =
+        sensing == .excluded ? "not watching the app in front" : sensing.label.lowercased()
       toast.showNote("Athina is \(reason), so it is not listening.")
       return
     }
@@ -1625,6 +1646,7 @@ final class AppState {
       toast.showNote("Could not start listening: \(error).")
       return
     }
+    presses += 1
     AppState.log.notice("listening for suggestion \(suggestion.id)")
     if case .waiting = talkBack {
       Task { await mentor?.withdrawFollowUp() }
@@ -1678,21 +1700,31 @@ final class AppState {
     if case .waiting = talkBack {
       Task { await mentor?.withdrawFollowUp() }
     }
-    Task { await act(on: text, for: suggestion) }
+    // A press before the reply is taken takes its place.
+    let press = presses
+    Task {
+      guard presses == press else { return }
+      await act(on: text, for: suggestion, press: press)
+    }
   }
 
   /// The key came up: finish the transcript and act on it.
+  ///
+  /// A press is released once: while its transcript is finished, another
+  /// release, or the time limit, does nothing to it.
   private func pushToTalkReleased() {
-    guard case .listening = talkBack else { return }
+    guard case .listening = talkBack, releasedPress != presses else { return }
+    releasedPress = presses
     listeningLimitTask?.cancel()
     listeningLimitTask = nil
     let suggestion = activeSuggestion
+    let press = presses
     transcriptTask = Task { [weak self] in
       guard let self else { return }
       let text = await self.listener.finish()
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled, self.presses == press else { return }
       self.transcriptTask = nil
-      await self.handleTranscript(text, for: suggestion)
+      await self.handleTranscript(text, for: suggestion, press: press)
     }
   }
 
@@ -1725,13 +1757,17 @@ final class AppState {
     }
   }
 
-  private func handleTranscript(_ text: String?, for suggestion: Suggestion?) async {
+  private func handleTranscript(
+    _ text: String?,
+    for suggestion: Suggestion?,
+    press: Int
+  ) async {
     guard case .listening = talkBack else { return }
     guard let suggestion, activeSuggestion?.id == suggestion.id else {
       setTalkBack(.idle)
       return
     }
-    await act(on: text, for: suggestion)
+    await act(on: text, for: suggestion, press: press)
   }
 
   /// What a transcript, heard or typed, does: one of the toast's answers, or
@@ -1741,7 +1777,10 @@ final class AppState {
   /// suggestions, until it is closed. A press that heard nothing is not an
   /// exchange: the toast gets back whatever countdown it had, and nothing is
   /// held for it.
-  private func act(on text: String?, for suggestion: Suggestion) async {
+  ///
+  /// `press` is the press it began with: once a newer one has started, an
+  /// answer that comes back does nothing.
+  private func act(on text: String?, for suggestion: Suggestion, press: Int) async {
     let match = text.flatMap(TranscriptMatcher.match)
     setTalkBack(.idle)
     settlePress(match, for: suggestion)
@@ -1774,7 +1813,7 @@ final class AppState {
       guard let followUp = await mentor.askFollowUp(about: suggestion, question: question) else {
         return
       }
-      guard activeSuggestion?.id == suggestion.id,
+      guard presses == press, activeSuggestion?.id == suggestion.id,
         talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
       else { return }
       setTalkBack(.idle)
@@ -2070,7 +2109,8 @@ final class AppState {
     if case .on = controlMode { controlEvents.append(event) }
   }
 
-  private func handle(_ event: MentorEvent) {
+  /// What the mentor loop publishes, handled as it arrives.
+  func handle(_ event: MentorEvent) {
     switch event {
     case .status(let status):
       if status != mentorStatus { mentorStatus = status }

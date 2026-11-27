@@ -74,9 +74,10 @@ final class SpeechListener {
   /// What the release grace and the wait for a final result are waited out on.
   private let clock: any AthinaClock
   private(set) var isListening = false
-  private var engine: AVAudioEngine?
-  private var request: SFSpeechAudioBufferRecognitionRequest?
-  private var task: SFSpeechRecognitionTask?
+  /// The recording whose audio is running, until it stops.
+  private var audio: (any SpeechRecording)?
+  /// The recording whose transcript is being recognized, until it is settled.
+  private var recognition: (any SpeechRecording)?
   /// Counts recordings, so a recognizer callback or a timeout left over
   /// from an earlier one cannot touch the current one.
   private var session = 0
@@ -87,12 +88,19 @@ final class SpeechListener {
   private var waiters: [CheckedContinuation<String?, Never>] = []
 
   private let hearing: Hearing
+  /// What a recording from the microphone runs on.
+  private let input: any SpeechInput
   /// Where a scripted recording reports the words `hear` gives it.
   private var scriptedPartial: (@MainActor (String) -> Void)?
 
-  init(clock: any AthinaClock, hears hearing: Hearing = .microphone) {
+  init(
+    clock: any AthinaClock,
+    hears hearing: Hearing = .microphone,
+    input: any SpeechInput = Microphone()
+  ) {
     self.clock = clock
     self.hearing = hearing
+    self.input = input
   }
 
   /// Starts capturing and transcribing. `onPartial` receives the transcript
@@ -110,36 +118,20 @@ final class SpeechListener {
       isListening = true
       return
     }
-    guard let recognizer = SFSpeechRecognizer(locale: .current),
-      recognizer.supportsOnDeviceRecognition
-    else {
-      throw Failure.unavailable
-    }
-    let engine = AVAudioEngine()
-    let input = engine.inputNode
-    let format = input.outputFormat(forBus: 0)
-    guard format.sampleRate > 0, format.channelCount > 0 else { throw Failure.noInput }
+    let recording = try input.makeRecording()
 
     cancel()
     session += 1
     let session = session
-    let request = SFSpeechAudioBufferRecognitionRequest()
-    request.shouldReportPartialResults = true
-    request.requiresOnDeviceRecognition = true
-    request.taskHint = .dictation
     latest = ""
     finished = false
     finishing = false
     partials = 0
 
-    // Both callbacks below run on the framework's own threads, so they are
-    // `@Sendable`: a closure written here would otherwise be inferred to
-    // be main-actor isolated, and the runtime traps on entry off the main
-    // actor. Only plain values cross to the main actor.
-    task = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
-      let text = result?.bestTranscription.formattedString
-      let isFinal = result?.isFinal ?? false
-      let failure = error.map { String(describing: $0) }
+    recognition = recording
+    // Results arrive on the recognizer's own thread; only plain values cross
+    // to the main actor.
+    try recording.start { @Sendable [weak self] text, isFinal, failure in
       Task { @MainActor [weak self] in
         self?.handle(
           session: session,
@@ -150,16 +142,7 @@ final class SpeechListener {
         )
       }
     }
-    // The request is appended to from the audio thread only, and read by
-    // the recognizer, which is what it is for.
-    nonisolated(unsafe) let tapRequest = request
-    input.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable buffer, _ in
-      tapRequest.append(buffer)
-    }
-    engine.prepare()
-    try engine.start()
-    self.engine = engine
-    self.request = request
+    audio = recording
     isListening = true
   }
 
@@ -191,7 +174,7 @@ final class SpeechListener {
       complete()
       return transcript
     }
-    request?.endAudio()
+    recognition?.endAudio()
     SpeechListener.log.notice(
       """
       audio ended after \(self.partials) partial results, \
@@ -265,9 +248,8 @@ final class SpeechListener {
 
   private func stopAudio() {
     isListening = false
-    engine?.inputNode.removeTap(onBus: 0)
-    engine?.stop()
-    engine = nil
+    audio?.stopAudio()
+    audio = nil
   }
 
   /// Settles the recording's transcript: the recognizer is cancelled so it
@@ -275,9 +257,8 @@ final class SpeechListener {
   private func complete() {
     guard !finished else { return }
     finished = true
-    task?.cancel()
-    task = nil
-    request = nil
+    recognition?.cancel()
+    recognition = nil
     scriptedPartial = nil
     let result = transcript
     let pending = waiters
@@ -285,5 +266,110 @@ final class SpeechListener {
     for waiter in pending {
       waiter.resume(returning: result)
     }
+  }
+}
+
+/// What a recording from the microphone runs on, apart from the listener's own
+/// bookkeeping: the system's audio and recognizer, or in a test a stand-in for
+/// both that opens no microphone.
+@MainActor
+protocol SpeechInput {
+  /// A recording ready to start, or `SpeechListener.Failure` when there is no
+  /// on-device recognizer for the current locale or no microphone input.
+  func makeRecording() throws -> any SpeechRecording
+}
+
+/// One recording: audio from the microphone, fed to the recognizer.
+@MainActor
+protocol SpeechRecording: AnyObject {
+  /// Starts the audio and its recognition. Each result arrives on the
+  /// recognizer's own thread as the transcript so far, whether it is final,
+  /// and the recognizer's error.
+  func start(reporting result: @escaping @Sendable (String?, Bool, String?) -> Void) throws
+  /// Stops the audio.
+  func stopAudio()
+  /// Tells the recognizer that no more audio is coming.
+  func endAudio()
+  /// Stops the recognition, which then reports nothing further.
+  func cancel()
+}
+
+/// The microphone, transcribed by the system recognizer, required to
+/// recognize on device.
+struct Microphone: SpeechInput {
+  func makeRecording() throws -> any SpeechRecording {
+    try MicrophoneRecording()
+  }
+}
+
+@MainActor
+private final class MicrophoneRecording: SpeechRecording {
+  private let recognizer: SFSpeechRecognizer
+  private let format: AVAudioFormat
+  private var engine: AVAudioEngine?
+  private let request = SFSpeechAudioBufferRecognitionRequest()
+  private var task: SFSpeechRecognitionTask?
+
+  init() throws {
+    guard let recognizer = SFSpeechRecognizer(locale: .current),
+      recognizer.supportsOnDeviceRecognition
+    else {
+      throw SpeechListener.Failure.unavailable
+    }
+    let engine = AVAudioEngine()
+    let format = engine.inputNode.outputFormat(forBus: 0)
+    guard format.sampleRate > 0, format.channelCount > 0 else {
+      throw SpeechListener.Failure.noInput
+    }
+    self.recognizer = recognizer
+    self.format = format
+    self.engine = engine
+  }
+
+  func start(reporting result: @escaping @Sendable (String?, Bool, String?) -> Void) throws {
+    guard let engine else { return }
+    request.shouldReportPartialResults = true
+    request.requiresOnDeviceRecognition = true
+    request.taskHint = .dictation
+    // Both callbacks below run on the framework's own threads, so they are
+    // `@Sendable`: a closure written here would otherwise be inferred to
+    // be main-actor isolated, and the runtime traps on entry off the main
+    // actor. Only plain values leave them.
+    task = recognizer.recognitionTask(with: request) { @Sendable recognized, error in
+      result(
+        recognized?.bestTranscription.formattedString,
+        recognized?.isFinal ?? false,
+        error.map { String(describing: $0) }
+      )
+    }
+    // The request is appended to from the audio thread only, and read by
+    // the recognizer, which is what it is for.
+    nonisolated(unsafe) let tapRequest = request
+    engine.inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) {
+      @Sendable buffer, _ in
+      tapRequest.append(buffer)
+    }
+    engine.prepare()
+    do {
+      try engine.start()
+    } catch {
+      stopAudio()
+      throw error
+    }
+  }
+
+  func stopAudio() {
+    engine?.inputNode.removeTap(onBus: 0)
+    engine?.stop()
+    engine = nil
+  }
+
+  func endAudio() {
+    request.endAudio()
+  }
+
+  func cancel() {
+    task?.cancel()
+    task = nil
   }
 }
